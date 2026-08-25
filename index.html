@@ -11,9 +11,9 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, getDocs, query, where, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // CHAVES DO FIREBASE
+        // SUAS CHAVES REAIS DO FIREBASE JÁ CONFIGURADAS
         const firebaseConfig = {
-            apiKey: "SUA_API_KEY",
+            apiKey: "AIzaSyD6Mv3DiNGWCoC4Rd0iOt6L22qxnS-XAhY",
             authDomain: "kronos-gestao-fincanceira.firebaseapp.com",
             databaseURL: "https://kronos-gestao-fincanceira-default-rtdb.firebaseio.com",
             projectId: "kronos-gestao-fincanceira",
@@ -37,7 +37,6 @@
             let btnAtivo = document.getElementById('btn-' + abaId);
             btnAtivo.className = 'btn-menu w-full flex items-center gap-3 px-4 py-3 bg-slate-800 text-amber-500 rounded-lg font-medium transition-all text-left border-l-4 border-amber-500 shadow-md';
             
-            // Carrega os dados específicos de cada aba ao abrir
             if(abaId === 'cobrancas') carregarCobrancas(cicloAtual);
             if(abaId === 'clientes') carregarClientes();
             if(abaId === 'mensal') carregarMensal();
@@ -71,12 +70,12 @@
                     
                     tabela.innerHTML += `
                         <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente_id.substring(0, 20)}</td>
-                            <td class="px-6 py-4 text-sm text-slate-600">${data.marca}</td>
+                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${String(data.cliente_id || '').substring(0, 20)}</td>
+                            <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
                             <td class="px-6 py-4 text-sm text-slate-500">Dia ${data.dia_vencimento}</td>
-                            <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor_total).toFixed(2)}</td>
+                            <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor_total || 0).toFixed(2)}</td>
                             <td class="px-6 py-4 text-sm text-emerald-600 font-bold">R$ ${Number(data.valor_pago || 0).toFixed(2)}</td>
-                            <td class="px-6 py-4 text-sm text-slate-600 text-center">${data.parcelas_pagas}/${data.quantidade_parcelas}</td>
+                            <td class="px-6 py-4 text-sm text-slate-600 text-center">${data.parcelas_pagas || 1}/${data.quantidade_parcelas || 1}</td>
                             <td class="px-6 py-4 text-sm">${badge}</td>
                         </tr>
                     `;
@@ -99,18 +98,18 @@
                 const querySnapshot = await getDocs(collection(db, "clientes"));
                 tabela.innerHTML = '';
                 if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum cliente cadastrado.</td></tr>`;
+                    tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum cliente cadastrado. Importe a planilha CLIENTES.xlsx.</td></tr>`;
                     return;
                 }
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
                     tabela.innerHTML += `
                         <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente}</td>
-                            <td class="px-6 py-4 text-sm text-slate-600 font-medium">${data.marca}</td>
-                            <td class="px-6 py-4 text-sm text-slate-500">${data.cnpj}</td>
-                            <td class="px-6 py-4 text-sm text-slate-600">${data.documento}</td>
-                            <td class="px-6 py-4 text-sm text-blue-600 font-semibold">${data.vendedora}</td>
+                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
+                            <td class="px-6 py-4 text-sm text-slate-600 font-medium">${data.marca || ''}</td>
+                            <td class="px-6 py-4 text-sm text-slate-500">${data.cnpj || ''}</td>
+                            <td class="px-6 py-4 text-sm text-slate-600">${data.documento || ''}</td>
+                            <td class="px-6 py-4 text-sm text-blue-600 font-semibold">${data.vendedora || ''}</td>
                         </tr>
                     `;
                 });
@@ -125,25 +124,25 @@
                 const querySnapshot = await getDocs(collection(db, "mensal"));
                 tabela.innerHTML = '';
                 if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum registro administrativo.</td></tr>`;
+                    tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum registro administrativo. Importe a planilha DATA DE PAGAMENTO PARCELAS.xlsx.</td></tr>`;
                     return;
                 }
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
                     tabela.innerHTML += `
                         <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente}</td>
-                            <td class="px-6 py-4 text-sm text-slate-600">${data.marca}</td>
-                            <td class="px-6 py-4 text-sm text-slate-500">${data.data_pagamento}</td>
-                            <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor).toFixed(2)}</td>
-                            <td class="px-6 py-4 text-sm font-bold text-emerald-600">${data.status}</td>
+                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
+                            <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
+                            <td class="px-6 py-4 text-sm text-slate-500">${data.data_pagamento || ''}</td>
+                            <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor || 0).toFixed(2)}</td>
+                            <td class="px-6 py-4 text-sm font-bold text-emerald-600">${data.status || 'PAGO'}</td>
                         </tr>
                     `;
                 });
             } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
-        // --- IMPORTADOR UNIVERSAL E INTELIGENTE ---
+        // --- IMPORTADOR INTELIGENTE DE PLANILHAS ---
         window.processarPlanilha = function(event, modulo) {
             const file = event.target.files[0];
             if (!file) return;
@@ -158,7 +157,6 @@
                 const workbook = XLSX.read(data, {type: 'array'});
                 let salvos = 0;
 
-                // FUNÇÃO: Processar Cobranças (Dias 5 e 20)
                 if (modulo === 'cobrancas') {
                     for (let nomeAba of ['DIA 5', 'DIA 20']) {
                         if (!workbook.Sheets[nomeAba]) continue;
@@ -189,7 +187,6 @@
                     carregarCobrancas(cicloAtual);
                 }
 
-                // FUNÇÃO: Processar Base de Clientes (Aba 'BASE DE MARCAS ')
                 if (modulo === 'clientes') {
                     const aba = workbook.Sheets['BASE DE MARCAS '];
                     if (aba) {
@@ -209,7 +206,6 @@
                     carregarClientes();
                 }
 
-                // FUNÇÃO: Processar Mensal/ADM (Aba 'BASE ADMINISTRATIVO ')
                 if (modulo === 'mensal') {
                     const aba = workbook.Sheets['BASE ADMINISTRATIVO '];
                     if (aba) {
@@ -217,7 +213,6 @@
                         for (let linha of json) {
                             if (!linha['CLIENTE']) continue;
                             let valor = parseFloat(String(linha['VALOR']).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                            // Excel serial date to string logic simplified
                             let rawData = linha['DATA DE PAGAMENTO'];
                             let formatedDate = rawData;
                             if (typeof rawData === 'number') {
