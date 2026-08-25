@@ -9,9 +9,9 @@
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, getDocs, query, where, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, query, where, addDoc, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // SUAS CHAVES REAIS DO FIREBASE JÁ CONFIGURADAS
+        // SUAS CHAVES DO FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyD6Mv3DiNGWCoC4Rd0iOt6L22qxnS-XAhY",
             authDomain: "kronos-gestao-fincanceira.firebaseapp.com",
@@ -26,7 +26,7 @@
         const db = getFirestore(app);
         let cicloAtual = 5;
 
-        // --- LÓGICA DE NAVEGAÇÃO DO MENU (Estilo Executivo) ---
+        // --- NAVEGAÇÃO ENTRE ABAS ---
         window.abrirAba = function(abaId) {
             document.querySelectorAll('.aba-conteudo').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.btn-menu').forEach(el => {
@@ -35,14 +35,17 @@
 
             document.getElementById('aba-' + abaId).classList.remove('hidden');
             let btnAtivo = document.getElementById('btn-' + abaId);
-            btnAtivo.className = 'btn-menu w-full flex items-center gap-3 px-4 py-3 bg-slate-800 text-amber-500 rounded-lg font-medium transition-all text-left border-l-4 border-amber-500 shadow-md';
+            if (btnAtivo) {
+                btnAtivo.className = 'btn-menu w-full flex items-center gap-3 px-4 py-3 bg-slate-800 text-amber-500 rounded-lg font-medium transition-all text-left border-l-4 border-amber-500 shadow-md';
+            }
             
             if(abaId === 'cobrancas') carregarCobrancas(cicloAtual);
             if(abaId === 'clientes') carregarClientes();
+            if(abaId === 'rpi') carregarRPI();
             if(abaId === 'mensal') carregarMensal();
         }
 
-        // --- 1. MÓDULO COBRANÇAS (Dias 5 e 20) ---
+        // --- 1. MÓDULO COBRANÇAS (EDIÇÃO DE PARCELAS E VALOR AUTOMÁTICO) ---
         window.carregarCobrancas = async function(dia) {
             cicloAtual = dia;
             document.getElementById('btnDia5').className = dia === 5 ? 'px-4 py-2 bg-blue-700 text-white rounded-md font-semibold shadow' : 'px-4 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-semibold hover:bg-slate-50';
@@ -63,10 +66,16 @@
                     return;
                 }
 
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    count++; totalGeral += Number(data.valor_total || 0); totalPago += Number(data.valor_pago || 0);
-                    const badge = data.status_pagamento === 'pago' ? '<span class="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded">PAGO</span>' : '<span class="px-2 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded">PENDENTE</span>';
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const docId = docSnap.id;
+                    count++; 
+                    totalGeral += Number(data.valor_total || 0); 
+                    totalPago += Number(data.valor_pago || 0);
+
+                    const badge = data.status_pagamento === 'pago' 
+                        ? '<span class="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded">PAGO</span>' 
+                        : '<span class="px-2 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded">PENDENTE</span>';
                     
                     tabela.innerHTML += `
                         <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
@@ -75,13 +84,46 @@
                             <td class="px-6 py-4 text-sm text-slate-500">Dia ${data.dia_vencimento}</td>
                             <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor_total || 0).toFixed(2)}</td>
                             <td class="px-6 py-4 text-sm text-emerald-600 font-bold">R$ ${Number(data.valor_pago || 0).toFixed(2)}</td>
-                            <td class="px-6 py-4 text-sm text-slate-600 text-center">${data.parcelas_pagas || 1}/${data.quantidade_parcelas || 1}</td>
-                            <td class="px-6 py-4 text-sm">${badge}</td>
+                            <td class="px-6 py-4 text-sm text-slate-600 text-center font-medium">${data.parcelas_pagas || 0} / ${data.quantidade_parcelas || 1}</td>
+                            <td class="px-6 py-4 text-sm flex items-center gap-3">
+                                ${badge}
+                                <button onclick="editarParcelas('${docId}', ${data.parcelas_pagas || 0}, ${data.quantidade_parcelas || 1}, ${data.valor_total || 0})" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded border border-slate-300 transition-colors">Atualizar</button>
+                            </td>
                         </tr>
                     `;
                 });
                 atualizarCards(totalGeral, totalPago, count);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-500">Erro de conexão.</td></tr>`; }
+            } catch (error) { console.error(error); tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-500">Erro ao carregar.</td></tr>`; }
+        }
+
+        // Função para editar parcelas e atualizar valor pago automaticamente
+        window.editarParcelas = async function(docId, parcelasAtuais, totalParcelas, valorParcelaTotal) {
+            let novasPagas = prompt(`Atualizar parcelas pagas (Total: ${totalParcelas}):`, parcelasAtuais);
+            if (novasPagas === null) return;
+            novasPagas = parseInt(novasPagas);
+            if (isNaN(novasPagas) || novasPagas < 0 || novasPagas > totalParcelas) {
+                alert("Número de parcelas inválido!");
+                return;
+            }
+
+            // Cálculo automático do valor pago proporcional ou baseado no total
+            // Se valor_total for a parcela individual ou o total do contrato, ajustamos:
+            let novoValorPago = novasPagas * valorParcelaTotal;
+            let novoStatus = novasPagas >= totalParcelas ? 'pago' : 'pendente';
+
+            try {
+                const docRef = doc(db, "cobrancas", docId);
+                await updateDoc(docRef, {
+                    parcelas_pagas: novasPagas,
+                    valor_pago: novoValorPago,
+                    status_pagamento: novoStatus
+                });
+                alert("Parcelas atualizadas e valor recalculado com sucesso!");
+                carregarCobrancas(cicloAtual);
+            } catch (err) {
+                console.error(err);
+                alert("Erro ao atualizar no Firebase.");
+            }
         }
 
         function atualizarCards(total, pago, qtd) {
@@ -90,10 +132,10 @@
             document.getElementById('totalClientes').innerText = qtd;
         }
 
-        // --- 2. MÓDULO BASE DE CLIENTES ---
+        // --- 2. MÓDULO CLIENTES ---
         window.carregarClientes = async function() {
             const tabela = document.getElementById('tabelaClientes');
-            tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Consultando base de clientes...</td></tr>`;
+            tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Carregando clientes...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "clientes"));
                 tabela.innerHTML = '';
@@ -116,15 +158,43 @@
             } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
-        // --- 3. MÓDULO MENSAL / ADM ---
+        // --- 3. MÓDULO RPI (INPI) - SEPARADO POR FASES E MARCAS ---
+        window.carregarRPI = async function() {
+            const tabela = document.getElementById('tabelaRPI');
+            tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Carregando dados das Revistas RPI...</td></tr>`;
+            try {
+                const querySnapshot = await getDocs(collection(db, "rpi_marcas"));
+                tabela.innerHTML = '';
+                if (querySnapshot.empty) {
+                    tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Nenhum registro RPI. Importe a planilha REVISTAS RPI (1).xlsx.</td></tr>`;
+                    return;
+                }
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    let badgeFase = `<span class="px-2.5 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded-full">${data.fase || 'GERAL'}</span>`;
+                    if(data.fase && data.fase.toUpperCase().includes('DEFER')) badgeFase = `<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-full">${data.fase}</span>`;
+                    if(data.fase && (data.fase.toUpperCase().includes('INDEFER') || data.fase.toUpperCase().includes('ARQUIV'))) badgeFase = `<span class="px-2.5 py-1 text-xs font-bold bg-rose-100 text-rose-800 rounded-full">${data.fase}</span>`;
+
+                    tabela.innerHTML += `
+                        <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                            <td class="px-6 py-4 text-sm font-mono text-slate-600 font-semibold">${data.processo || ''}</td>
+                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.marca || ''}</td>
+                            <td class="px-6 py-4 text-sm">${badgeFase}</td>
+                        </tr>
+                    `;
+                });
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-red-500">Erro ao carregar RPI.</td></tr>`; }
+        }
+
+        // --- 4. MÓDULO MENSAL / ADM ---
         window.carregarMensal = async function() {
             const tabela = document.getElementById('tabelaMensal');
-            tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Consultando dados administrativos...</td></tr>`;
+            tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Carregando administrativo...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "mensal"));
                 tabela.innerHTML = '';
                 if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum registro administrativo. Importe a planilha DATA DE PAGAMENTO PARCELAS.xlsx.</td></tr>`;
+                    tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum registro administrativo. Importe a planilha de parcelas.</td></tr>`;
                     return;
                 }
                 querySnapshot.forEach((doc) => {
@@ -142,7 +212,7 @@
             } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
-        // --- IMPORTADOR INTELIGENTE DE PLANILHAS ---
+        // --- IMPORTADOR UNIVERSAL DE PLANILHAS (COM LEITOR DE RPI) ---
         window.processarPlanilha = function(event, modulo) {
             const file = event.target.files[0];
             if (!file) return;
@@ -157,6 +227,7 @@
                 const workbook = XLSX.read(data, {type: 'array'});
                 let salvos = 0;
 
+                // 1. COBRANÇAS (Dias 5 e 20)
                 if (modulo === 'cobrancas') {
                     for (let nomeAba of ['DIA 5', 'DIA 20']) {
                         if (!workbook.Sheets[nomeAba]) continue;
@@ -172,7 +243,7 @@
                             }
                             let valorParcela = parseFloat(String(linha['VALOR PARCELA']).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
                             let valorRecebido = parseFloat(String(linha['TOTAL RECEBIDO']).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                            let status = valorRecebido >= valorParcela ? 'pago' : 'pendente';
+                            let status = valorRecebido >= (parcelasPagas * valorParcela) ? 'pago' : 'pendente';
                             try {
                                 await addDoc(collection(db, "cobrancas"), {
                                     cliente_id: String(linha['CLIENTE']), marca: String(linha['MARCA'] || '-'),
@@ -187,8 +258,9 @@
                     carregarCobrancas(cicloAtual);
                 }
 
+                // 2. CLIENTES
                 if (modulo === 'clientes') {
-                    const aba = workbook.Sheets['BASE DE MARCAS '];
+                    const aba = workbook.Sheets['BASE DE MARCAS '] || workbook.Sheets[workbook.SheetNames[0]];
                     if (aba) {
                         const json = XLSX.utils.sheet_to_json(aba);
                         for (let linha of json) {
@@ -206,8 +278,46 @@
                     carregarClientes();
                 }
 
+                // 3. RPI (INPI) - LEITOR INTELIGENTE DE FASES E MARCAS
+                if (modulo === 'rpi') {
+                    for (let sheetName of workbook.SheetNames) {
+                        const sheet = workbook.Sheets[sheetName];
+                        const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
+                        
+                        let currentPhase = "GERAL";
+                        
+                        // Varre a planilha por colunas em pares (Processo / Marca)
+                        for (let r = 0; r < rows.length; r++) {
+                            let row = rows[r];
+                            for (let c = 0; c < row.length; c += 4) { // Pula de 4 em 4 colunas conforme estrutura do RPI
+                                let valCol0 = row[c] ? String(row[c]).trim() : "";
+                                let valCol1 = row[c+1] ? String(row[c+1]).trim() : "";
+
+                                // Se a coluna parece ser um título de fase (ex: DEFERIMENTO, EXAME FORMAL)
+                                if (valCol0 && !/^\d+$/.test(valCol0) && valCol0.length > 3) {
+                                    currentPhase = valCol0;
+                                }
+                                
+                                // Se encontrou um número de processo e uma marca correspondente
+                                if (valCol0 && /^\d+$/.test(valCol0) && valCol1) {
+                                    try {
+                                        await addDoc(collection(db, "rpi_marcas"), {
+                                            processo: valCol0,
+                                            marca: valCol1,
+                                            fase: currentPhase.toUpperCase()
+                                        });
+                                        salvos++;
+                                    } catch (err) {}
+                                }
+                            }
+                        }
+                    }
+                    carregarRPI();
+                }
+
+                // 4. MENSAL / ADM
                 if (modulo === 'mensal') {
-                    const aba = workbook.Sheets['BASE ADMINISTRATIVO '];
+                    const aba = workbook.Sheets['BASE ADMINISTRATIVO '] || workbook.Sheets[workbook.SheetNames[0]];
                     if (aba) {
                         const json = XLSX.utils.sheet_to_json(aba);
                         for (let linha of json) {
@@ -242,7 +352,7 @@
 </head>
 <body class="bg-slate-100 min-h-screen flex font-sans">
 
-    <!-- MENU LATERAL (SIDEBAR EXECUTIVA) -->
+    <!-- MENU LATERAL EXECUTIVO -->
     <aside class="w-72 bg-slate-950 text-white min-h-screen flex flex-col fixed shadow-2xl z-10">
         <div class="p-8 border-b border-slate-800/50 flex items-center gap-3">
             <div class="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center font-bold text-slate-900 text-xl">K</div>
@@ -286,7 +396,7 @@
             <div class="flex justify-between items-center mb-10">
                 <div>
                     <h2 class="text-3xl font-black text-slate-800 tracking-tight">Faturamento e Ciclos</h2>
-                    <p class="text-slate-500 mt-1">Gestão de pagamentos dos dias 5 e 20.</p>
+                    <p class="text-slate-500 mt-1">Gestão de pagamentos dos dias 5 e 20 com baixa automática de parcelas.</p>
                 </div>
             </div>
             
@@ -327,8 +437,8 @@
                             <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Vencimento</th>
                             <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Parcela</th>
                             <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Pago</th>
-                            <th class="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Parcelas</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Parcelas Pagas</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Ações / Status</th>
                         </tr>
                     </thead>
                     <tbody id="tabelaCobrancas" class="bg-white divide-y divide-slate-100"></tbody>
@@ -336,7 +446,7 @@
             </div>
         </div>
 
-        <!-- ABA 2: BASE DE CLIENTES -->
+        <!-- ABA 2: CLIENTES -->
         <div id="aba-clientes" class="aba-conteudo hidden">
             <div class="flex justify-between items-center mb-10">
                 <div>
@@ -366,24 +476,35 @@
             </div>
         </div>
 
-        <!-- ABA 3: REVISTAS RPI -->
+        <!-- ABA 3: REVISTAS RPI (SEPARADO POR FASES E MARCAS) -->
         <div id="aba-rpi" class="aba-conteudo hidden">
             <div class="flex justify-between items-center mb-10">
                 <div>
                     <h2 class="text-3xl font-black text-slate-800 tracking-tight">Monitoramento INPI (RPI)</h2>
-                    <p class="text-slate-500 mt-1">Acompanhamento das Revistas da Propriedade Industrial.</p>
+                    <p class="text-slate-500 mt-1">Marcas e processos separados por fases extraídos das revistas.</p>
+                </div>
+                <div>
+                    <input type="file" id="upRpi" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'rpi')" />
+                    <label for="upRpi" class="cursor-pointer px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold shadow-md flex items-center gap-2">
+                        <span id="upRpiText">Importar REVISTAS RPI (1).xlsx</span>
+                    </label>
                 </div>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-16 text-center">
-                <div class="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
-                </div>
-                <h3 class="text-xl font-bold text-slate-800">Módulo em Desenvolvimento</h3>
-                <p class="text-slate-500 mt-2 max-w-lg mx-auto">Como as planilhas do INPI têm formatos muito variáveis em cada mês, estamos estruturando um leitor avançado que identificará as marcas automaticamente no futuro.</p>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Processo</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca / Empresa</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Fase do Processo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaRPI" class="bg-white divide-y divide-slate-100"></tbody>
+                </table>
             </div>
         </div>
 
-        <!-- ABA 4: MENSAL E CONTRATOS -->
+        <!-- ABA 4: MENSAL / ADM -->
         <div id="aba-mensal" class="aba-conteudo hidden">
             <div class="flex justify-between items-center mb-10">
                 <div>
