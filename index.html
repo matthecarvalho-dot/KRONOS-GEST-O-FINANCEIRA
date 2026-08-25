@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kronos - ERP Executive</title>
-    <!-- LOGOMARCA NA BARRA DO NAVEGADOR (FAVICON) -->
     <link rel="icon" type="image/jpeg" href="https://i.imgur.com/NZyhksv.jpeg">
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -13,6 +12,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, getDocs, query, where, addDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
         // SUAS CHAVES REAIS DO FIREBASE
         const firebaseConfig = {
@@ -27,8 +27,54 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // E-MAIL DE ADMINISTRADOR FIXO DIRETO NO CÓDIGO
+        const EMAIL_ADMIN = "matthecarvalho@gmail.com";
+
         let cicloAtual = 5;
         let rpiCache = [];
+
+        // --- CONTROLE DE AUTENTICAÇÃO ---
+        onAuthStateChanged(auth, (user) => {
+            const telaLogin = document.getElementById('tela-login');
+            const appContainer = document.getElementById('app-container');
+
+            if (user) {
+                telaLogin.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                
+                // Valida se é o administrador único
+                if (user.email === EMAIL_ADMIN) {
+                    document.getElementById('menu-admin').classList.remove('hidden');
+                } else {
+                    document.getElementById('menu-admin').classList.add('hidden');
+                }
+
+                abrirAba('cobrancas');
+            } else {
+                telaLogin.classList.remove('hidden');
+                appContainer.classList.add('hidden');
+            }
+        });
+
+        window.fazerLogin = function() {
+            const email = document.getElementById('loginEmail').value;
+            const senha = document.getElementById('loginSenha').value;
+            const erroMsg = document.getElementById('loginErro');
+
+            erroMsg.innerText = "Entrando...";
+            signInWithEmailAndPassword(auth, email, senha)
+                .catch((error) => {
+                    erroMsg.innerText = "Erro: E-mail ou senha incorretos.";
+                });
+        }
+
+        window.fazerLogout = function() {
+            signOut(auth).then(() => {
+                window.location.reload();
+            });
+        }
 
         // --- NAVEGAÇÃO ENTRE ABAS ---
         window.abrirAba = function(abaId) {
@@ -48,6 +94,7 @@
             if(abaId === 'rpi') carregarRPI();
             if(abaId === 'gru') carregarGRU();
             if(abaId === 'mensal') carregarMensal();
+            if(abaId === 'admin') carregarUsuariosAdmin();
         }
 
         // --- 1. MÓDULO COBRANÇAS ---
@@ -98,7 +145,7 @@
                     `;
                 });
                 atualizarCards(totalGeral, totalPago, count);
-            } catch (error) { console.error(error); tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-500">Erro ao carregar.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-500">Erro ao carregar.</td></tr>`; }
         }
 
         window.editarParcelas = async function(docId, parcelasAtuais, totalParcelas, valorParcelaTotal) {
@@ -115,7 +162,7 @@
             try {
                 const docRef = doc(db, "cobrancas", docId);
                 await updateDoc(docRef, { parcelas_pagas: novasPagas, valor_pago: novoValorPago, status_pagamento: novoStatus });
-                alert("Parcelas atualizadas e valor recalculado com sucesso!");
+                alert("Parcelas atualizadas com sucesso!");
                 carregarCobrancas(cicloAtual);
             } catch (err) { alert("Erro ao atualizar no Firebase."); }
         }
@@ -126,20 +173,17 @@
             document.getElementById('totalClientes').innerText = qtd;
         }
 
-        // --- 2. MÓDULO CLIENTES COM DASHBOARD ---
+        // --- MÓDULO CLIENTES ---
         window.carregarClientes = async function() {
             const tabela = document.getElementById('tabelaClientes');
             tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Carregando clientes...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "clientes"));
                 tabela.innerHTML = '';
-                
-                let totalCli = 0;
-                let assinadoCount = 0;
-                let pendenteCount = 0;
+                let totalCli = 0, assinadoCount = 0, pendenteCount = 0;
 
                 if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum cliente cadastrado. Importe a planilha CLIENTES.xlsx.</td></tr>`;
+                    tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum cliente cadastrado. Importe a planilha.</td></tr>`;
                     atualizarDashboardClientes(0, 0, 0);
                     return;
                 }
@@ -175,20 +219,18 @@
             document.getElementById('dashPendentes').innerText = pendentes;
         }
 
-        // --- 3. MÓDULO RPI COM FILTROS INTERATIVOS DE FASES ---
+        // --- MÓDULO RPI ---
         window.carregarRPI = async function() {
             const tabela = document.getElementById('tabelaRPI');
-            tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Carregando dados das Revistas RPI...</td></tr>`;
+            tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Carregando RPI...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "rpi_marcas"));
                 rpiCache = [];
-                
                 if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Nenhum registro RPI. Importe a planilha REVISTAS RPI (1).xlsx.</td></tr>`;
+                    tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Nenhum registro RPI. Importe a planilha.</td></tr>`;
                     renderizarFiltrosRPI({});
                     return;
                 }
-
                 let contFases = {};
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
@@ -196,10 +238,9 @@
                     rpiCache.push({ processo: data.processo, marca: data.marca, fase: fase });
                     contFases[fase] = (contFases[fase] || 0) + 1;
                 });
-
                 renderizarFiltrosRPI(contFases);
                 filtrarRPI('TODOS');
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-red-500">Erro ao carregar RPI.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
         window.renderizarFiltrosRPI = function(contFases) {
@@ -210,15 +251,10 @@
                     <p class="text-2xl mt-1">${rpiCache.length}</p>
                 </button>
             `;
-
             const fasesDesejadas = ['DEFERIMENTO', 'EXAME FORMAL', 'EXAME DE MÉRITO', 'OPOSIÇÃO', 'INDEFERIMENTO', 'CONCESSÃO', 'ARQUIVAMENTO'];
-            
             fasesDesejadas.forEach(faseNome => {
                 let qtd = 0;
-                Object.keys(contFases).forEach(f => {
-                    if (f.includes(faseNome)) qtd += contFases[f];
-                });
-
+                Object.keys(contFases).forEach(f => { if (f.includes(faseNome)) qtd += contFases[f]; });
                 container.innerHTML += `
                     <button onclick="filtrarRPI('${faseNome}')" class="p-4 bg-white text-slate-800 rounded-xl shadow-sm border border-slate-200 text-left font-semibold hover:border-[#D4AF37] transition-all">
                         <p class="text-xs uppercase tracking-widest text-slate-400 truncate">${faseNome}</p>
@@ -231,43 +267,30 @@
         window.filtrarRPI = function(termoFase) {
             const tabela = document.getElementById('tabelaRPI');
             tabela.innerHTML = '';
-
-            let filtrados = rpiCache;
-            if (termoFase !== 'TODOS') {
-                filtrados = rpiCache.filter(item => item.fase.includes(termoFase));
-            }
-
+            let filtrados = termoFase === 'TODOS' ? rpiCache : rpiCache.filter(item => item.fase.includes(termoFase));
             if (filtrados.length === 0) {
-                tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Nenhum processo encontrado para esta fase.</td></tr>`;
+                tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Nenhum processo encontrado.</td></tr>`;
                 return;
             }
-
             filtrados.forEach(data => {
-                let badgeFase = `<span class="px-2.5 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded-full">${data.fase}</span>`;
-                if(data.fase.includes('DEFER') || data.fase.includes('CONCESS')) badgeFase = `<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-full">${data.fase}</span>`;
-                if(data.fase.includes('INDEFER') || data.fase.includes('ARQUIV')) badgeFase = `<span class="px-2.5 py-1 text-xs font-bold bg-rose-100 text-rose-800 rounded-full">${data.fase}</span>`;
-
                 tabela.innerHTML += `
                     <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
                         <td class="px-6 py-4 text-sm font-mono text-slate-600 font-semibold">${data.processo || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.marca || ''}</td>
-                        <td class="px-6 py-4 text-sm">${badgeFase}</td>
+                        <td class="px-6 py-4 text-sm"><span class="px-2.5 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded-full">${data.fase}</span></td>
                     </tr>
                 `;
             });
         }
 
-        // --- 4. MÓDULO GRU ---
+        // --- MÓDULO GRU ---
         window.carregarGRU = async function() {
             const tabela = document.getElementById('tabelaGRU');
-            tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Carregando guias GRU...</td></tr>`;
+            tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Carregando...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "gru"));
                 tabela.innerHTML = '';
-                if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Nenhuma GRU cadastrada. Importe a planilha de GRU.</td></tr>`;
-                    return;
-                }
+                if (querySnapshot.empty) { tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Nenhuma GRU cadastrada.</td></tr>`; return; }
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
                     tabela.innerHTML += `
@@ -282,17 +305,14 @@
             } catch (error) { tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
-        // --- 5. MÓDULO MENSAL / ADM ---
+        // --- MÓDULO MENSAL ---
         window.carregarMensal = async function() {
             const tabela = document.getElementById('tabelaMensal');
-            tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Carregando administrativo...</td></tr>`;
+            tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Carregando...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "mensal"));
                 tabela.innerHTML = '';
-                if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum registro administrativo. Importe a planilha de parcelas.</td></tr>`;
-                    return;
-                }
+                if (querySnapshot.empty) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum registro.</td></tr>`; return; }
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
                     tabela.innerHTML += `
@@ -308,11 +328,25 @@
             } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
-        // --- IMPORTADOR UNIVERSAL DE PLANILHAS ---
+        // --- GESTÃO DE USUÁRIOS (EXCLUSIVO ADMIN) ---
+        window.carregarUsuariosAdmin = async function() {
+            const container = document.getElementById('listaUsuariosAdmin');
+            container.innerHTML = `
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="text-lg font-bold text-[#0B192C]">Painel de Controle do Administrador Único</h3>
+                    <p class="text-slate-500 mt-1 text-sm">Você está logado como administrador principal com privilégios totais sobre o sistema.</p>
+                    <div class="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                        <p class="text-xs font-bold text-slate-400 uppercase">E-mail do Administrador:</p>
+                        <p class="text-sm font-semibold text-slate-800 mt-1">${auth.currentUser ? auth.currentUser.email : 'Não autenticado'}</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- IMPORTADOR UNIVERSAL ---
         window.processarPlanilha = function(event, modulo) {
             const file = event.target.files[0];
             if (!file) return;
-
             let btnTextId = event.target.id + 'Text';
             let textoOriginal = document.getElementById(btnTextId).innerText;
             document.getElementById(btnTextId).innerText = "Processando...";
@@ -377,21 +411,15 @@
                         const sheet = workbook.Sheets[sheetName];
                         const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
                         let currentPhase = "GERAL";
-                        
                         for (let r = 0; r < rows.length; r++) {
                             let row = rows[r];
                             for (let c = 0; c < row.length; c += 4) {
                                 let valCol0 = row[c] ? String(row[c]).trim() : "";
                                 let valCol1 = row[c+1] ? String(row[c+1]).trim() : "";
-
-                                if (valCol0 && !/^\d+$/.test(valCol0) && valCol0.length > 3) {
-                                    currentPhase = valCol0;
-                                }
+                                if (valCol0 && !/^\d+$/.test(valCol0) && valCol0.length > 3) { currentPhase = valCol0; }
                                 if (valCol0 && /^\d+$/.test(valCol0) && valCol1) {
                                     try {
-                                        await addDoc(collection(db, "rpi_marcas"), {
-                                            processo: valCol0, marca: valCol1, fase: currentPhase.toUpperCase()
-                                        });
+                                        await addDoc(collection(db, "rpi_marcas"), { processo: valCol0, marca: valCol1, fase: currentPhase.toUpperCase() });
                                         salvos++;
                                     } catch (err) {}
                                 }
@@ -410,10 +438,7 @@
                             if (!cli) continue;
                             let valor = parseFloat(String(linha['VALOR'] || linha['Valor'] || 0).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
                             try {
-                                await addDoc(collection(db, "gru"), {
-                                    cliente: String(cli), marca: String(linha['MARCA'] || linha['Marca'] || '-'),
-                                    vencimento: String(linha['VENCIMENTO'] || linha['Vencimento'] || '-'), valor: valor
-                                });
+                                await addDoc(collection(db, "gru"), { cliente: String(cli), marca: String(linha['MARCA'] || '-'), vencimento: String(linha['VENCIMENTO'] || '-'), valor: valor });
                                 salvos++;
                             } catch (err) {}
                         }
@@ -435,10 +460,7 @@
                                 formatedDate = dateObj.toLocaleDateString('pt-BR');
                             }
                             try {
-                                await addDoc(collection(db, "mensal"), {
-                                    cliente: String(linha['CLIENTE']), marca: String(linha['MARCA'] || '-'),
-                                    valor: valor, data_pagamento: String(formatedDate || '-'), status: String(linha['STATUS'] || 'PAGO')
-                                });
+                                await addDoc(collection(db, "mensal"), { cliente: String(linha['CLIENTE']), marca: String(linha['MARCA'] || '-'), valor: valor, data_pagamento: String(formatedDate || '-'), status: String(linha['STATUS'] || 'PAGO') });
                                 salvos++;
                             } catch (err) {}
                         }
@@ -446,251 +468,285 @@
                     carregarMensal();
                 }
 
-                alert(`Importação concluída! ${salvos} registros salvos no banco de dados.`);
+                alert(`Importação concluída! ${salvos} registros salvos.`);
                 document.getElementById(btnTextId).innerText = textoOriginal;
             };
             reader.readAsArrayBuffer(file);
         }
-
-        window.onload = () => { abrirAba('cobrancas'); };
     </script>
 </head>
 <body class="bg-slate-100 min-h-screen flex font-sans">
 
-    <!-- MENU LATERAL (AZUL MARINHO & DOURADO) -->
-    <aside class="w-72 bg-[#0B192C] text-white min-h-screen flex flex-col fixed shadow-2xl z-10 border-r border-[#1E3E62]">
-        <div class="p-6 border-b border-[#1E3E62] flex items-center gap-3">
-            <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos Logo" class="w-12 h-12 rounded-lg object-cover shadow-md border border-[#D4AF37]">
-            <div>
-                <h1 class="text-xl font-black tracking-widest text-white">KRONOS</h1>
-                <p class="text-[9px] text-[#D4AF37] uppercase tracking-[0.2em] font-bold">ERP Executive</p>
-            </div>
-        </div>
-        
-        <nav class="flex-1 px-4 py-6 space-y-3">
-            <button id="btn-cobrancas" onclick="abrirAba('cobrancas')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
-                <svg class="w-5 h-5 text-[#D4AF37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                Faturamento (5 e 20)
-            </button>
-            <button id="btn-clientes" onclick="abrirAba('clientes')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
-                <svg class="w-5 h-5 text-[#D4AF37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                Base de Clientes
-            </button>
-            <button id="btn-rpi" onclick="abrirAba('rpi')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
-                <svg class="w-5 h-5 text-[#D4AF37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                Revistas RPI (INPI)
-            </button>
-            <button id="btn-gru" onclick="abrirAba('gru')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
-                <svg class="w-5 h-5 text-[#D4AF37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
-                Planilha da GRU
-            </button>
-            <button id="btn-mensal" onclick="abrirAba('mensal')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
-                <svg class="w-5 h-5 text-[#D4AF37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-                Financeiro / Mensal
-            </button>
-        </nav>
-        <div class="p-6">
-            <div class="bg-[#1E3E62] rounded-lg p-4 text-center border border-[#2b527d]">
-                <p class="text-xs text-slate-300">Sistema Conectado</p>
-                <p class="text-sm font-bold text-emerald-400 mt-1">Firebase Online</p>
-            </div>
-        </div>
-    </aside>
-
-    <!-- ÁREA DE CONTEÚDO PRINCIPAL -->
-    <main class="ml-72 flex-1 p-10 w-full bg-slate-100 min-h-screen">
-
-        <!-- ABA 1: COBRANÇAS -->
-        <div id="aba-cobrancas" class="aba-conteudo block">
-            <div class="flex justify-between items-center mb-10">
+    <!-- TELA DE LOGIN -->
+    <div id="tela-login" class="fixed inset-0 bg-[#0B192C] z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-200 text-center">
+            <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos Logo" class="w-16 h-16 rounded-xl object-cover shadow-md border-2 border-[#D4AF37] mx-auto mb-4">
+            <h2 class="text-2xl font-black text-[#0B192C] tracking-wide">KRONOS ERP</h2>
+            <p class="text-slate-400 text-xs uppercase tracking-widest mt-1">Acesso Executivo Restrito</p>
+            
+            <div class="mt-8 space-y-4 text-left">
                 <div>
-                    <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Faturamento e Ciclos</h2>
-                    <p class="text-slate-500 mt-1">Gestão de pagamentos dos dias 5 e 20 com baixa automática de parcelas.</p>
+                    <label class="block text-xs font-bold text-slate-500 uppercase">E-mail</label>
+                    <input type="email" id="loginEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="seu-email@empresa.com">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase">Senha</label>
+                    <input type="password" id="loginSenha" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="••••••••">
+                </div>
+                <button onclick="fazerLogin()" class="w-full py-3.5 bg-[#0B192C] hover:bg-[#1E3E62] text-[#D4AF37] font-bold rounded-lg shadow-md transition-all tracking-wider text-sm border border-[#D4AF37]">
+                    ENTRAR NO SISTEMA
+                </button>
+                <p id="loginErro" class="text-center text-xs font-semibold text-rose-600 mt-2"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- APLICAÇÃO PRINCIPAL -->
+    <div id="app-container" class="hidden flex w-full">
+        <!-- MENU LATERAL -->
+        <aside class="w-72 bg-[#0B192C] text-white min-h-screen flex flex-col fixed shadow-2xl z-10 border-r border-[#1E3E62]">
+            <div class="p-6 border-b border-[#1E3E62] flex items-center gap-3">
+                <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos Logo" class="w-12 h-12 rounded-lg object-cover shadow-md border border-[#D4AF37]">
+                <div>
+                    <h1 class="text-xl font-black tracking-widest text-white">KRONOS</h1>
+                    <p class="text-[9px] text-[#D4AF37] uppercase tracking-[0.2em] font-bold">ERP Executive</p>
                 </div>
             </div>
             
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Previsto (Ciclo)</p>
-                    <p id="totalPrevisto" class="text-4xl font-black text-[#0B192C] mt-2">R$ 0,00</p>
+            <nav class="flex-1 px-4 py-6 space-y-2">
+                <button id="btn-cobrancas" onclick="abrirAba('cobrancas')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
+                    📊 Faturamento (5 e 20)
+                </button>
+                <button id="btn-clientes" onclick="abrirAba('clientes')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
+                    👥 Base de Clientes
+                </button>
+                <button id="btn-rpi" onclick="abrirAba('rpi')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
+                    📖 Revistas RPI (INPI)
+                </button>
+                <button id="btn-gru" onclick="abrirAba('gru')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
+                    📑 Planilha da GRU
+                </button>
+                <button id="btn-mensal" onclick="abrirAba('mensal')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
+                    💰 Financeiro / Mensal
+                </button>
+                <button id="menu-admin" onclick="abrirAba('admin')" class="btn-menu hidden w-full flex items-center gap-3 px-4 py-3 text-amber-400 hover:bg-[#1E3E62] rounded-lg font-medium transition-all text-left border-l-4 border-amber-400">
+                    🔐 Gestão de Usuários (Admin)
+                </button>
+            </nav>
+
+            <div class="p-6">
+                <button onclick="fazerLogout()" class="w-full py-2.5 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white text-xs font-bold rounded-lg border border-rose-500/30 transition-all">
+                    Sair do Sistema (Logout)
+                </button>
+            </div>
+        </aside>
+
+        <!-- CONTEÚDO PRINCIPAL -->
+        <main class="ml-72 flex-1 p-10 w-full bg-slate-100 min-h-screen">
+
+            <!-- ABA 1: COBRANÇAS -->
+            <div id="aba-cobrancas" class="aba-conteudo block">
+                <div class="flex justify-between items-center mb-10">
+                    <div>
+                        <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Faturamento e Ciclos</h2>
+                        <p class="text-slate-500 mt-1">Gestão de pagamentos dos dias 5 e 20 com baixa automática de parcelas.</p>
+                    </div>
                 </div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Arrecadado</p>
-                    <p id="totalArrecadado" class="text-4xl font-black text-emerald-600 mt-2">R$ 0,00</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Previsto (Ciclo)</p>
+                        <p id="totalPrevisto" class="text-4xl font-black text-[#0B192C] mt-2">R$ 0,00</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Arrecadado</p>
+                        <p id="totalArrecadado" class="text-4xl font-black text-emerald-600 mt-2">R$ 0,00</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Registros Ativos</p>
+                        <p id="totalClientes" class="text-4xl font-black text-blue-600 mt-2">0</p>
+                    </div>
                 </div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Registros Ativos</p>
-                    <p id="totalClientes" class="text-4xl font-black text-blue-600 mt-2">0</p>
+
+                <div class="bg-white p-6 rounded-t-xl shadow-sm border border-slate-200 border-b-0 flex justify-between items-center">
+                    <div class="flex gap-2">
+                        <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow">Ciclo Dia 5</button>
+                        <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-semibold hover:bg-slate-50">Ciclo Dia 20</button>
+                    </div>
+                    <div>
+                        <input type="file" id="upCobrancas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'cobrancas')" />
+                        <label for="upCobrancas" class="cursor-pointer px-4 py-2 bg-[#0B192C] hover:bg-[#1E3E62] text-white rounded-md font-semibold shadow-md flex items-center gap-2">
+                            <span id="upCobrancasText">Importar Dados (Parcelas)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-b-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Vencimento</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Valor Parcela</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Valor Pago</th>
+                                <th class="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase">Parcelas Pagas</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Ações / Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaCobrancas" class="bg-white divide-y divide-slate-100"></tbody>
+                    </table>
                 </div>
             </div>
 
-            <div class="bg-white p-6 rounded-t-xl shadow-sm border border-slate-200 border-b-0 flex justify-between items-center">
-                <div class="flex gap-2">
-                    <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow">Ciclo Dia 5</button>
-                    <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-semibold hover:bg-slate-50">Ciclo Dia 20</button>
+            <!-- ABA 2: CLIENTES -->
+            <div id="aba-clientes" class="aba-conteudo hidden">
+                <div class="flex justify-between items-center mb-10">
+                    <div>
+                        <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Base Geral de Clientes</h2>
+                        <p class="text-slate-500 mt-1">Gestão de contatos, contratos e vendedoras.</p>
+                    </div>
+                    <div>
+                        <input type="file" id="upClientes" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'clientes')" />
+                        <label for="upClientes" class="cursor-pointer px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold shadow-md">
+                            <span id="upClientesText">Importar CLIENTES.xlsx</span>
+                        </label>
+                    </div>
                 </div>
-                <div>
-                    <input type="file" id="upCobrancas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'cobrancas')" />
-                    <label for="upCobrancas" class="cursor-pointer px-4 py-2 bg-[#0B192C] hover:bg-[#1E3E62] text-white rounded-md font-semibold shadow-md flex items-center gap-2">
-                        <span id="upCobrancasText">Importar Dados (Parcelas)</span>
-                    </label>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-[#0B192C]">
+                        <p class="text-xs font-bold text-slate-400 uppercase">Total de Clientes</p>
+                        <p id="dashTotalCli" class="text-4xl font-black text-[#0B192C] mt-2">0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-emerald-600">
+                        <p class="text-xs font-bold text-slate-400 uppercase">Documentos Assinados</p>
+                        <p id="dashAssinados" class="text-4xl font-black text-emerald-600 mt-2">0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-amber-500">
+                        <p class="text-xs font-bold text-slate-400 uppercase">Documentos Pendentes</p>
+                        <p id="dashPendentes" class="text-4xl font-black text-amber-500 mt-2">0</p>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">CNPJ</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Documento</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Vendedora</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaClientes" class="bg-white divide-y divide-slate-100"></tbody>
+                    </table>
                 </div>
             </div>
 
-            <div class="bg-white rounded-b-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table class="min-w-full divide-y divide-slate-200">
-                    <thead class="bg-slate-50">
-                        <tr>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Vencimento</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Parcela</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Pago</th>
-                            <th class="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Parcelas Pagas</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Ações / Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabelaCobrancas" class="bg-white divide-y divide-slate-100"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- ABA 2: CLIENTES COM DASHBOARD -->
-        <div id="aba-clientes" class="aba-conteudo hidden">
-            <div class="flex justify-between items-center mb-10">
-                <div>
-                    <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Base Geral de Clientes</h2>
-                    <p class="text-slate-500 mt-1">Gestão de contatos, contratos e vendedoras.</p>
+            <!-- ABA 3: RPI -->
+            <div id="aba-rpi" class="aba-conteudo hidden">
+                <div class="flex justify-between items-center mb-10">
+                    <div>
+                        <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Monitoramento INPI (RPI)</h2>
+                        <p class="text-slate-500 mt-1">Filtre os processos por fase clicando nos botões abaixo.</p>
+                    </div>
+                    <div>
+                        <input type="file" id="upRpi" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'rpi')" />
+                        <label for="upRpi" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow-md">
+                            <span id="upRpiText">Importar REVISTAS RPI</span>
+                        </label>
+                    </div>
                 </div>
-                <div>
-                    <input type="file" id="upClientes" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'clientes')" />
-                    <label for="upClientes" class="cursor-pointer px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold shadow-md flex items-center gap-2">
-                        <span id="upClientesText">Importar CLIENTES.xlsx</span>
-                    </label>
+
+                <div id="dashRpiContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"></div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Processo</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Fase</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaRPI" class="bg-white divide-y divide-slate-100"></tbody>
+                    </table>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-[#0B192C]">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Total de Clientes</p>
-                    <p id="dashTotalCli" class="text-4xl font-black text-[#0B192C] mt-2">0</p>
+            <!-- ABA 4: GRU -->
+            <div id="aba-gru" class="aba-conteudo hidden">
+                <div class="flex justify-between items-center mb-10">
+                    <div>
+                        <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Gestão de Guias GRU</h2>
+                        <p class="text-slate-500 mt-1">Controle de emissão e vencimentos.</p>
+                    </div>
+                    <div>
+                        <input type="file" id="upGru" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'gru')" />
+                        <label for="upGru" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-white rounded-md font-semibold shadow-md">
+                            <span id="upGruText">Importar Planilha da GRU</span>
+                        </label>
+                    </div>
                 </div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-emerald-600">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Documentos Assinados</p>
-                    <p id="dashAssinados" class="text-4xl font-black text-emerald-600 mt-2">0</p>
-                </div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-amber-500">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Documentos Pendentes</p>
-                    <p id="dashPendentes" class="text-4xl font-black text-amber-500 mt-2">0</p>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table class="min-w-full divide-y divide-slate-200">
-                    <thead class="bg-slate-50">
-                        <tr>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">CNPJ</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Documento</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Vendedora</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabelaClientes" class="bg-white divide-y divide-slate-100"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- ABA 3: REVISTAS RPI COM FILTROS DE FASES CLICÁVEIS -->
-        <div id="aba-rpi" class="aba-conteudo hidden">
-            <div class="flex justify-between items-center mb-10">
-                <div>
-                    <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Monitoramento INPI (RPI)</h2>
-                    <p class="text-slate-500 mt-1">Clique nas fases abaixo para filtrar instantaneamente os processos e clientes.</p>
-                </div>
-                <div>
-                    <input type="file" id="upRpi" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'rpi')" />
-                    <label for="upRpi" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] hover:bg-[#1E3E62] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow-md flex items-center gap-2">
-                        <span id="upRpiText">Importar REVISTAS RPI (1).xlsx</span>
-                    </label>
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Vencimento</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaGRU" class="bg-white divide-y divide-slate-100"></tbody>
+                    </table>
                 </div>
             </div>
 
-            <div id="dashRpiContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"></div>
-
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table class="min-w-full divide-y divide-slate-200">
-                    <thead class="bg-slate-50">
-                        <tr>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Processo</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca / Empresa</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Fase do Processo</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabelaRPI" class="bg-white divide-y divide-slate-100"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- ABA 4: PLANILHA DA GRU -->
-        <div id="aba-gru" class="aba-conteudo hidden">
-            <div class="flex justify-between items-center mb-10">
-                <div>
-                    <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Gestão de Guias GRU</h2>
-                    <p class="text-slate-500 mt-1">Controle de emissão, vencimentos e valores de GRUs.</p>
+            <!-- ABA 5: MENSAL -->
+            <div id="aba-mensal" class="aba-conteudo hidden">
+                <div class="flex justify-between items-center mb-10">
+                    <div>
+                        <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Fechamento Mensal / ADM</h2>
+                        <p class="text-slate-500 mt-1">Gestão de contratos administrativos.</p>
+                    </div>
+                    <div>
+                        <input type="file" id="upMensal" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'mensal')" />
+                        <label for="upMensal" class="cursor-pointer px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold shadow-md">
+                            <span id="upMensalText">Importar ADMINISTRATIVO</span>
+                        </label>
+                    </div>
                 </div>
-                <div>
-                    <input type="file" id="upGru" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'gru')" />
-                    <label for="upGru" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] hover:bg-[#1E3E62] text-white rounded-md font-semibold shadow-md flex items-center gap-2">
-                        <span id="upGruText">Importar Planilha da GRU</span>
-                    </label>
-                </div>
-            </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table class="min-w-full divide-y divide-slate-200">
-                    <thead class="bg-slate-50">
-                        <tr>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Vencimento</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabelaGRU" class="bg-white divide-y divide-slate-100"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- ABA 5: MENSAL / ADM -->
-        <div id="aba-mensal" class="aba-conteudo hidden">
-            <div class="flex justify-between items-center mb-10">
-                <div>
-                    <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Fechamento Mensal / ADM</h2>
-                    <p class="text-slate-500 mt-1">Gestão de contratos e pagamentos administrativos.</p>
-                </div>
-                <div>
-                    <input type="file" id="upMensal" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'mensal')" />
-                    <label for="upMensal" class="cursor-pointer px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold shadow-md flex items-center gap-2">
-                        <span id="upMensalText">Importar ADMINISTRATIVO</span>
-                    </label>
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Data</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Valor</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaMensal" class="bg-white divide-y divide-slate-100"></tbody>
+                    </table>
                 </div>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table class="min-w-full divide-y divide-slate-200">
-                    <thead class="bg-slate-50">
-                        <tr>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Data de Pagamento</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabelaMensal" class="bg-white divide-y divide-slate-100"></tbody>
-                </table>
-            </div>
-        </div>
 
-    </main>
+            <!-- ABA EXCLUSIVA ADMIN: GESTÃO DE USUÁRIOS -->
+            <div id="aba-admin" class="aba-conteudo hidden">
+                <div class="flex justify-between items-center mb-10">
+                    <div>
+                        <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Painel do Administrador</h2>
+                        <p class="text-slate-500 mt-1">Controle restrito e central de acesso do sistema.</p>
+                    </div>
+                </div>
+                <div id="listaUsuariosAdmin"></div>
+            </div>
+
+        </main>
+    </div>
 </body>
 </html>
