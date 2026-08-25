@@ -25,6 +25,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         let cicloAtual = 5;
+        let rpiCache = []; // Cache global para filtros instantâneos da RPI
 
         // --- NAVEGAÇÃO ENTRE ABAS ---
         window.abrirAba = function(abaId) {
@@ -171,59 +172,85 @@
             document.getElementById('dashPendentes').innerText = pendentes;
         }
 
-        // --- 3. MÓDULO RPI COM DASHBOARD DE FASES ---
+        // --- 3. MÓDULO RPI COM FILTROS INTERATIVOS DE FASES ---
         window.carregarRPI = async function() {
             const tabela = document.getElementById('tabelaRPI');
             tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Carregando dados das Revistas RPI...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "rpi_marcas"));
-                tabela.innerHTML = '';
+                rpiCache = [];
                 
-                let totalRpi = 0;
-                let contFases = {};
-
                 if (querySnapshot.empty) {
                     tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Nenhum registro RPI. Importe a planilha REVISTAS RPI (1).xlsx.</td></tr>`;
-                    atualizarDashboardRPI({});
+                    renderizarFiltrosRPI({});
                     return;
                 }
 
+                let contFases = {};
                 querySnapshot.forEach((doc) => {
-                    totalRpi++;
                     const data = doc.data();
                     let fase = (data.fase || 'GERAL').trim().toUpperCase();
+                    rpiCache.push({ processo: data.processo, marca: data.marca, fase: fase });
                     contFases[fase] = (contFases[fase] || 0) + 1;
-
-                    let badgeFase = `<span class="px-2.5 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded-full">${fase}</span>`;
-                    if(fase.includes('DEFER')) badgeFase = `<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-full">${fase}</span>`;
-                    if(fase.includes('INDEFER') || fase.includes('ARQUIV')) badgeFase = `<span class="px-2.5 py-1 text-xs font-bold bg-rose-100 text-rose-800 rounded-full">${fase}</span>`;
-
-                    tabela.innerHTML += `
-                        <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                            <td class="px-6 py-4 text-sm font-mono text-slate-600 font-semibold">${data.processo || ''}</td>
-                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.marca || ''}</td>
-                            <td class="px-6 py-4 text-sm">${badgeFase}</td>
-                        </tr>
-                    `;
                 });
-                atualizarDashboardRPI(contFases);
+
+                renderizarFiltrosRPI(contFases);
+                filtrarRPI('TODOS'); // Exibe todos por padrão
             } catch (error) { tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-red-500">Erro ao carregar RPI.</td></tr>`; }
         }
 
-        function atualizarDashboardRPI(contFases) {
+        window.renderizarFiltrosRPI = function(contFases) {
             const container = document.getElementById('dashRpiContainer');
-            container.innerHTML = '';
-            let chaves = Object.keys(contFases);
-            if (chaves.length === 0) {
-                container.innerHTML = `<div class="bg-white p-4 rounded-xl border border-slate-200 text-slate-400 text-sm">Sem dados de fases.</div>`;
+            container.innerHTML = `
+                <button onclick="filtrarRPI('TODOS')" class="p-4 bg-[#0B192C] text-[#D4AF37] rounded-xl shadow border border-[#D4AF37] text-left font-bold hover:bg-[#1E3E62] transition-all">
+                    <p class="text-xs uppercase tracking-widest text-slate-300">TODOS OS PROCESSOS</p>
+                    <p class="text-2xl mt-1">${rpiCache.length}</p>
+                </button>
+            `;
+
+            // Fases padrões solicitadas pelo usuário para destaque imediato
+            const fasesDesejadas = ['DEFERIMENTO', 'EXAME FORMAL', 'EXAME DE MÉRITO', 'OPOSIÇÃO', 'INDEFERIMENTO', 'CONCESSÃO', 'ARQUIVAMENTO'];
+            
+            fasesDesejadas.forEach(faseNome => {
+                let qtd = 0;
+                Object.keys(contFases).forEach(f => {
+                    if (f.includes(faseNome)) qtd += contFases[f];
+                });
+
+                container.innerHTML += `
+                    <button onclick="filtrarRPI('${faseNome}')" class="p-4 bg-white text-slate-800 rounded-xl shadow-sm border border-slate-200 text-left font-semibold hover:border-[#D4AF37] transition-all">
+                        <p class="text-xs uppercase tracking-widest text-slate-400 truncate">${faseNome}</p>
+                        <p class="text-2xl font-black text-slate-800 mt-1">${qtd}</p>
+                    </button>
+                `;
+            });
+        }
+
+        window.filtrarRPI = function(termoFase) {
+            const tabela = document.getElementById('tabelaRPI');
+            tabela.innerHTML = '';
+
+            let filtrados = rpiCache;
+            if (termoFase !== 'TODOS') {
+                filtrados = rpiCache.filter(item => item.fase.includes(termoFase));
+            }
+
+            if (filtrados.length === 0) {
+                tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Nenhum processo encontrado para esta fase.</td></tr>`;
                 return;
             }
-            chaves.forEach(fase => {
-                container.innerHTML += `
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-[#D4AF37]">
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest truncate">${fase}</p>
-                        <p class="text-3xl font-black text-slate-800 mt-2">${contFases[fase]}</p>
-                    </div>
+
+            filtrados.forEach(data => {
+                let badgeFase = `<span class="px-2.5 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded-full">${data.fase}</span>`;
+                if(data.fase.includes('DEFER') || data.fase.includes('CONCESS')) badgeFase = `<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-full">${data.fase}</span>`;
+                if(data.fase.includes('INDEFER') || data.fase.includes('ARQUIV')) badgeFase = `<span class="px-2.5 py-1 text-xs font-bold bg-rose-100 text-rose-800 rounded-full">${data.fase}</span>`;
+
+                tabela.innerHTML += `
+                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                        <td class="px-6 py-4 text-sm font-mono text-slate-600 font-semibold">${data.processo || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm">${badgeFase}</td>
+                    </tr>
                 `;
             });
         }
@@ -435,15 +462,15 @@
 
     <!-- MENU LATERAL (AZUL MARINHO & DOURADO) -->
     <aside class="w-72 bg-[#0B192C] text-white min-h-screen flex flex-col fixed shadow-2xl z-10 border-r border-[#1E3E62]">
-        <div class="p-8 border-b border-[#1E3E62] flex items-center gap-3">
-            <div class="w-10 h-10 bg-[#D4AF37] rounded-lg flex items-center justify-center font-black text-[#0B192C] text-xl shadow">K</div>
+        <div class="p-6 border-b border-[#1E3E62] flex items-center gap-3">
+            <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos Logo" class="w-12 h-12 rounded-lg object-cover shadow-md border border-[#D4AF37]">
             <div>
-                <h1 class="text-2xl font-black tracking-widest text-white">KRONOS</h1>
-                <p class="text-[10px] text-[#D4AF37] uppercase tracking-[0.2em] font-bold">ERP Executive</p>
+                <h1 class="text-xl font-black tracking-widest text-white">KRONOS</h1>
+                <p class="text-[9px] text-[#D4AF37] uppercase tracking-[0.2em] font-bold">ERP Executive</p>
             </div>
         </div>
         
-        <nav class="flex-1 px-4 py-8 space-y-3">
+        <nav class="flex-1 px-4 py-6 space-y-3">
             <button id="btn-cobrancas" onclick="abrirAba('cobrancas')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
                 <svg class="w-5 h-5 text-[#D4AF37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 Faturamento (5 e 20)
@@ -578,23 +605,23 @@
             </div>
         </div>
 
-        <!-- ABA 3: REVISTAS RPI COM DASHBOARD DE FASES -->
+        <!-- ABA 3: REVISTAS RPI COM FILTROS DE FASES CLICÁVEIS -->
         <div id="aba-rpi" class="aba-conteudo hidden">
             <div class="flex justify-between items-center mb-10">
                 <div>
                     <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Monitoramento INPI (RPI)</h2>
-                    <p class="text-slate-500 mt-1">Acompanhamento e separação por fases e marcas dos processos.</p>
+                    <p class="text-slate-500 mt-1">Clique nas fases abaixo para filtrar instantaneamente os processos e clientes.</p>
                 </div>
                 <div>
                     <input type="file" id="upRpi" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'rpi')" />
-                    <label for="upRpi" class="cursor-pointer px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white rounded-md font-semibold shadow-md flex items-center gap-2">
+                    <label for="upRpi" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] hover:bg-[#1E3E62] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow-md flex items-center gap-2">
                         <span id="upRpiText">Importar REVISTAS RPI (1).xlsx</span>
                     </label>
                 </div>
             </div>
 
-            <!-- DASHBOARD DE FASES DA RPI -->
-            <div id="dashRpiContainer" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <!-- DASHBOARD DE FASES CLICÁVEIS (FILTROS) -->
+            <div id="dashRpiContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 <!-- Injetado dinamicamente via JS -->
             </div>
 
