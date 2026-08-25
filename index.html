@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kronos - Gestão Financeira e Marcas</title>
+    <title>Kronos - ERP Gestão Integrada</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
@@ -11,7 +11,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, getDocs, query, where, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // COLOQUE SUAS CHAVES DO FIREBASE AQUI
+        // CHAVES DO FIREBASE
         const firebaseConfig = {
             apiKey: "SUA_API_KEY",
             authDomain: "kronos-gestao-fincanceira.firebaseapp.com",
@@ -26,56 +26,61 @@
         const db = getFirestore(app);
         let cicloAtual = 5;
 
+        // --- LÓGICA DE NAVEGAÇÃO DO MENU ---
+        window.abrirAba = function(abaId) {
+            // Esconde todas as abas
+            document.querySelectorAll('.aba-conteudo').forEach(el => el.classList.add('hidden'));
+            // Tira o destaque de todos os botões do menu
+            document.querySelectorAll('.btn-menu').forEach(el => {
+                el.classList.remove('bg-gray-800', 'text-white');
+                el.classList.add('text-gray-300', 'hover:bg-gray-700');
+            });
+
+            // Mostra a aba selecionada e destaca o botão
+            document.getElementById('aba-' + abaId).classList.remove('hidden');
+            document.getElementById('btn-' + abaId).classList.add('bg-gray-800', 'text-white');
+            document.getElementById('btn-' + abaId).classList.remove('text-gray-300', 'hover:bg-gray-700');
+        }
+
+        // --- LÓGICA DO FINANCEIRO (DIAS 5 E 20) ---
         window.carregarCobrancas = async function(dia) {
             cicloAtual = dia;
-            
             document.getElementById('btnDia5').className = dia === 5 ? 'px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow' : 'px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-50';
             document.getElementById('btnDia20').className = dia === 20 ? 'px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow' : 'px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-50';
-
             const tabela = document.getElementById('tabelaCobrancas');
-            tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Carregando dados...</td></tr>`;
+            tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Carregando...</td></tr>`;
 
             try {
                 const q = query(collection(db, "cobrancas"), where("dia_vencimento", "==", dia));
                 const querySnapshot = await getDocs(q);
-
                 tabela.innerHTML = '';
                 let totalGeral = 0, totalPago = 0, count = 0;
 
                 if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Nenhuma cobrança no ciclo do dia ${dia}.</td></tr>`;
+                    tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Nenhum registro para o dia ${dia}.</td></tr>`;
                     atualizarCards(0, 0, 0);
                     return;
                 }
 
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
-                    count++;
-                    totalGeral += Number(data.valor_total || 0);
-                    totalPago += Number(data.valor_pago || 0);
-
-                    const badgeStatus = data.status_pagamento === 'pago' 
-                        ? '<span class="px-2.5 py-1 text-xs font-semibold bg-green-100 text-green-800 rounded-full">Pago</span>'
-                        : '<span class="px-2.5 py-1 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full">Pendente</span>';
-
+                    count++; totalGeral += Number(data.valor_total || 0); totalPago += Number(data.valor_pago || 0);
+                    const badge = data.status_pagamento === 'pago' ? '<span class="px-2 py-1 text-xs font-semibold bg-green-100 text-green-800 rounded-full">Pago</span>' : '<span class="px-2 py-1 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full">Pendente</span>';
+                    
                     tabela.innerHTML += `
                         <tr class="hover:bg-gray-50 border-b border-gray-100">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold">${data.cliente_id.substring(0, 20)}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium">${data.marca}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Dia ${data.dia_vencimento}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">R$ ${Number(data.valor_total).toFixed(2)}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-semibold">R$ ${Number(data.valor_pago || 0).toFixed(2)}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center">${data.parcelas_pagas} de ${data.quantidade_parcelas}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm">${badgeStatus}</td>
+                            <td class="px-6 py-4 text-sm text-gray-900 font-bold">${data.cliente_id.substring(0, 20)}</td>
+                            <td class="px-6 py-4 text-sm text-gray-700 font-medium">${data.marca}</td>
+                            <td class="px-6 py-4 text-sm text-gray-500">Dia ${data.dia_vencimento}</td>
+                            <td class="px-6 py-4 text-sm text-gray-900">R$ ${Number(data.valor_total).toFixed(2)}</td>
+                            <td class="px-6 py-4 text-sm text-green-600 font-semibold">R$ ${Number(data.valor_pago || 0).toFixed(2)}</td>
+                            <td class="px-6 py-4 text-sm text-gray-600 text-center">${data.parcelas_pagas}/${data.quantidade_parcelas}</td>
+                            <td class="px-6 py-4 text-sm">${badge}</td>
                         </tr>
                     `;
                 });
-
                 atualizarCards(totalGeral, totalPago, count);
-            } catch (error) {
-                console.error(error);
-                tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-500">Erro ao carregar dados.</td></tr>`;
-            }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
         function atualizarCards(total, pago, qtd) {
@@ -84,43 +89,29 @@
             document.getElementById('totalClientes').innerText = qtd;
         }
 
-        // LEITOR INTELIGENTE DA SUA PLANILHA EXATA
         window.processarPlanilha = function(event) {
+            // (Código de importação mantido idêntico ao anterior para os Dias 5 e 20)
             const file = event.target.files[0];
             if (!file) return;
-
             document.getElementById('btnImportarText').innerText = "Importando...";
-
             const reader = new FileReader();
             reader.onload = async function(e) {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
-                
-                // Vai procurar exatamente pelas abas que você criou no Excel
                 const abasFinanceiro = ['DIA 5', 'DIA 20'];
                 let salvos = 0;
-
                 for (let nomeAba of abasFinanceiro) {
                     if (!workbook.Sheets[nomeAba]) continue;
-                    
                     const diaVencimento = nomeAba.includes('5') ? 5 : 20;
                     const json = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba]);
-                    
                     for (let linha of json) {
                         if (!linha['CLIENTE']) continue; 
-                        
                         let quantParStr = String(linha['QUANT PAR'] || '1/1');
-                        let parcelasPagas = 1;
-                        let totalParcelas = 1;
-                        
-                        // Quebra a string "1/5" que vem do seu Excel
+                        let parcelasPagas = 1, totalParcelas = 1;
                         if (quantParStr.includes('/')) {
                             let partes = quantParStr.split('/');
-                            parcelasPagas = parseInt(partes[0]) || 1;
-                            totalParcelas = parseInt(partes[1]) || 1;
+                            parcelasPagas = parseInt(partes[0]) || 1; totalParcelas = parseInt(partes[1]) || 1;
                         }
-
-                        // Função para garantir que moedas do Brasil virem números
                         const parseMoeda = (val) => {
                             if (typeof val === 'number') return val;
                             if (!val) return 0;
@@ -129,33 +120,21 @@
                             else if (str.includes('.') && str.includes(',')) str = str.replace(/\./g, '').replace(',', '.');
                             return parseFloat(str) || 0;
                         };
-
-                        let valorParcela = parseMoeda(linha['VALOR PARCELA']);
-                        let valorRecebido = parseMoeda(linha['TOTAL RECEBIDO']);
-                        
+                        let valorParcela = parseMoeda(linha['VALOR PARCELA']), valorRecebido = parseMoeda(linha['TOTAL RECEBIDO']);
                         let status = valorRecebido >= valorParcela ? 'pago' : 'pendente';
-
                         try {
                             await addDoc(collection(db, "cobrancas"), {
-                                cliente_id: String(linha['CLIENTE']),
-                                marca: String(linha['MARCA'] || '-'),
-                                cnpj: String(linha['CNPJ'] || ''),
-                                dia_vencimento: diaVencimento,
-                                valor_total: valorParcela,
-                                valor_pago: valorRecebido,
-                                quantidade_parcelas: totalParcelas,
-                                parcelas_pagas: parcelasPagas,
-                                status_pagamento: status
+                                cliente_id: String(linha['CLIENTE']), marca: String(linha['MARCA'] || '-'),
+                                cnpj: String(linha['CNPJ'] || ''), dia_vencimento: diaVencimento,
+                                valor_total: valorParcela, valor_pago: valorRecebido,
+                                quantidade_parcelas: totalParcelas, parcelas_pagas: parcelasPagas, status_pagamento: status
                             });
                             salvos++;
-                        } catch (err) {
-                            console.error("Erro ao salvar linha:", err);
-                        }
+                        } catch (err) {}
                     }
                 }
-                
-                alert(`Sucesso! ${salvos} cobranças foram importadas diretamente para o ciclo dos dias 5 e 20.`);
-                document.getElementById('btnImportarText').innerText = "Importar Planilha Excel";
+                alert(`Sucesso! ${salvos} cobranças salvas.`);
+                document.getElementById('btnImportarText').innerText = "Importar Planilha";
                 carregarCobrancas(cicloAtual);
             };
             reader.readAsArrayBuffer(file);
@@ -164,71 +143,122 @@
         window.onload = () => { carregarCobrancas(5); };
     </script>
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="bg-gray-50 min-h-screen flex">
 
-    <header class="bg-white shadow-sm border-b border-gray-200">
-        <div class="max-w-7xl mx-auto px-4 py-5 flex justify-between items-center">
-            <h1 class="text-2xl font-bold text-gray-800">Kronos</h1>
-            <span class="text-sm font-medium bg-blue-100 text-blue-800 px-3 py-1 rounded-full">Painel Conectado</span>
+    <!-- MENU LATERAL (SIDEBAR) -->
+    <aside class="w-64 bg-slate-900 text-white min-h-screen flex flex-col fixed shadow-xl">
+        <div class="p-6 border-b border-gray-800">
+            <h1 class="text-2xl font-black text-blue-500 tracking-wider">KRONOS</h1>
+            <p class="text-xs text-gray-400 mt-1 uppercase">Gestão Empresarial</p>
         </div>
-    </header>
-
-    <main class="max-w-7xl mx-auto px-4 py-8">
         
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-blue-500">
-                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Previsto (Ciclo)</p>
-                <p id="totalPrevisto" class="text-3xl font-bold text-gray-900 mt-2">R$ 0,00</p>
-            </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-green-500">
-                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Arrecadado</p>
-                <p id="totalArrecadado" class="text-3xl font-bold text-green-600 mt-2">R$ 0,00</p>
-            </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-purple-500">
-                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Registros</p>
-                <p id="totalClientes" class="text-3xl font-bold text-gray-900 mt-2">0</p>
-            </div>
-        </div>
+        <nav class="flex-1 px-4 py-6 space-y-2">
+            <button id="btn-cobrancas" onclick="abrirAba('cobrancas')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 bg-gray-800 text-white rounded-lg font-medium transition-colors text-left">
+                📊 Cobranças (5 e 20)
+            </button>
+            <button id="btn-clientes" onclick="abrirAba('clientes')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-gray-700 rounded-lg font-medium transition-colors text-left">
+                👥 Base de Clientes
+            </button>
+            <button id="btn-rpi" onclick="abrirAba('rpi')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-gray-700 rounded-lg font-medium transition-colors text-left">
+                📖 Revistas RPI (INPI)
+            </button>
+            <button id="btn-mensal" onclick="abrirAba('mensal')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-gray-700 rounded-lg font-medium transition-colors text-left">
+                💰 Financeiro / Mensal
+            </button>
+        </nav>
+    </aside>
 
-        <div class="bg-white p-6 rounded-t-xl shadow-sm border border-gray-200 border-b-0">
-            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-                <h2 class="text-lg font-semibold text-gray-800">Faturamento por Vencimento</h2>
-                
-                <div class="flex flex-wrap gap-4 items-center">
-                    <div class="flex gap-2 bg-gray-100 p-1 rounded-lg">
-                        <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow transition-colors">Ciclo Dia 5</button>
-                        <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-transparent text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors">Ciclo Dia 20</button>
-                    </div>
+    <!-- ÁREA DE CONTEÚDO PRINCIPAL (Fica à direita do menu) -->
+    <main class="ml-64 flex-1 p-8 w-full">
 
-                    <div>
-                        <input type="file" id="uploadExcel" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event)" />
-                        <label for="uploadExcel" class="cursor-pointer px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium shadow transition-colors flex items-center gap-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                            <span id="btnImportarText">Importar DATA DE PAGAMENTO</span>
-                        </label>
-                    </div>
+        <!-- ABA 1: COBRANÇAS (Ativa por padrão) -->
+        <div id="aba-cobrancas" class="aba-conteudo block">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-800">Cobranças Ativas</h2>
+                <span class="text-sm font-medium bg-blue-100 text-blue-800 px-3 py-1 rounded-full">Painel Conectado</span>
+            </div>
+            
+            <!-- Cards de Resumo -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-blue-500">
+                    <p class="text-sm font-medium text-gray-500 uppercase">Previsto (Ciclo)</p>
+                    <p id="totalPrevisto" class="text-3xl font-bold text-gray-900 mt-2">R$ 0,00</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-green-500">
+                    <p class="text-sm font-medium text-gray-500 uppercase">Arrecadado</p>
+                    <p id="totalArrecadado" class="text-3xl font-bold text-green-600 mt-2">R$ 0,00</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-purple-500">
+                    <p class="text-sm font-medium text-gray-500 uppercase">Registros</p>
+                    <p id="totalClientes" class="text-3xl font-bold text-gray-900 mt-2">0</p>
                 </div>
             </div>
-        </div>
 
-        <div class="bg-white rounded-b-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div class="overflow-x-auto">
+            <!-- Controles e Tabela -->
+            <div class="bg-white p-6 rounded-t-xl shadow-sm border border-gray-200 border-b-0 flex justify-between items-center">
+                <div class="flex gap-2 bg-gray-100 p-1 rounded-lg">
+                    <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow transition-colors">Ciclo Dia 5</button>
+                    <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-transparent text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors">Ciclo Dia 20</button>
+                </div>
+                <div>
+                    <input type="file" id="uploadExcel" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event)" />
+                    <label for="uploadExcel" class="cursor-pointer px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium shadow flex items-center gap-2">
+                        <span id="btnImportarText">Importar Planilha</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-b-xl shadow-sm border border-gray-200 overflow-hidden">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Cliente</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Marca</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Vencimento</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Valor Parcela</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Valor Pago</th>
-                            <th class="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Parcelas</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Cliente</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Marca</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Vencimento</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Valor Parcela</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Valor Pago</th>
+                            <th class="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase">Parcelas</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
                         </tr>
                     </thead>
-                    <tbody id="tabelaCobrancas" class="bg-white divide-y divide-gray-200">
-                        <!-- Dados injetados aqui -->
-                    </tbody>
+                    <tbody id="tabelaCobrancas" class="bg-white divide-y divide-gray-200"></tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- ABA 2: BASE DE CLIENTES -->
+        <div id="aba-clientes" class="aba-conteudo hidden">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-800">Base de Clientes</h2>
+                <button class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow">+ Novo Cliente</button>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                <p class="text-gray-500 mb-4">Módulo pronto para receber a conexão com a planilha CLIENTES.xlsx</p>
+                <button class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Configurar Importação</button>
+            </div>
+        </div>
+
+        <!-- ABA 3: REVISTAS RPI -->
+        <div id="aba-rpi" class="aba-conteudo hidden">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-800">Monitoramento INPI (RPI)</h2>
+                <button class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow">Importar Revista RPI</button>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                <p class="text-gray-500 mb-4">Módulo pronto para rastrear Exigências de Mérito, Deferimentos e Prazos.</p>
+                <button class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Conectar Firebase</button>
+            </div>
+        </div>
+
+        <!-- ABA 4: MENSAL E CONTRATOS -->
+        <div id="aba-mensal" class="aba-conteudo hidden">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-800">Fechamento Mensal / ADM</h2>
+                <button class="px-4 py-2 bg-green-600 text-white rounded-lg font-medium shadow">Gerar Relatório</button>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                <p class="text-gray-500 mb-4">Aqui ficarão os contratos, cancelamentos e valores do administrativo.</p>
+                <button class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Ativar Módulo</button>
             </div>
         </div>
 
