@@ -4,53 +4,46 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kronos - Gestão Financeira e Marcas</title>
-    <!-- Tailwind CSS para um design moderno -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Firebase SDKs via CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, query, where, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // AS SUAS CHAVES REAIS DO FIREBASE
+        // COLOQUE SUAS CHAVES DO FIREBASE AQUI
         const firebaseConfig = {
-            apiKey: "AIzaSyD6Mv3DiNGWCoC4Rd0iOt6L22qxnS-XAhY",
+            apiKey: "SUA_API_KEY",
             authDomain: "kronos-gestao-fincanceira.firebaseapp.com",
             databaseURL: "https://kronos-gestao-fincanceira-default-rtdb.firebaseio.com",
             projectId: "kronos-gestao-fincanceira",
             storageBucket: "kronos-gestao-fincanceira.firebasestorage.app",
             messagingSenderId: "26146570774",
-            appId: "1:26146570774:web:0ca1bdf457eae2623eeb37",
-            measurementId: "G-B7SWGH8945"
+            appId: "1:26146570774:web:0ca1bdf457eae2623eeb37"
         };
 
-        // Inicializar Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-
         let cicloAtual = 5;
 
-        // Função para carregar cobranças do Firebase
         window.carregarCobrancas = async function(dia) {
             cicloAtual = dia;
             
-            // Atualizar visual dos botões
             document.getElementById('btnDia5').className = dia === 5 ? 'px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow' : 'px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-50';
             document.getElementById('btnDia20').className = dia === 20 ? 'px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow' : 'px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-50';
 
             const tabela = document.getElementById('tabelaCobrancas');
-            tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">Carregando dados...</td></tr>`;
+            tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Carregando dados...</td></tr>`;
 
             try {
                 const q = query(collection(db, "cobrancas"), where("dia_vencimento", "==", dia));
                 const querySnapshot = await getDocs(q);
 
                 tabela.innerHTML = '';
-                let totalGeral = 0;
-                let totalPago = 0;
-                let count = 0;
+                let totalGeral = 0, totalPago = 0, count = 0;
 
                 if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">Nenhuma cobrança encontrada para o ciclo do dia ${dia}.</td></tr>`;
+                    tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Nenhuma cobrança no ciclo do dia ${dia}.</td></tr>`;
                     atualizarCards(0, 0, 0);
                     return;
                 }
@@ -67,20 +60,21 @@
 
                     tabela.innerHTML += `
                         <tr class="hover:bg-gray-50 border-b border-gray-100">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">${data.cliente_id.substring(0, 15)}...</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">Dia ${data.dia_vencimento}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold">${data.cliente_id.substring(0, 20)}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium">${data.marca}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Dia ${data.dia_vencimento}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">R$ ${Number(data.valor_total).toFixed(2)}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-semibold">R$ ${Number(data.valor_pago || 0).toFixed(2)}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center">${data.parcelas_pagas} de ${data.quantidade_parcelas}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm">${badgeStatus}</td>
                         </tr>
                     `;
                 });
 
                 atualizarCards(totalGeral, totalPago, count);
-
             } catch (error) {
-                console.error("Erro ao carregar dados: ", error);
-                tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro ao carregar os dados.</td></tr>`;
+                console.error(error);
+                tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-500">Erro ao carregar dados.</td></tr>`;
             }
         }
 
@@ -90,9 +84,84 @@
             document.getElementById('totalClientes').innerText = qtd;
         }
 
-        window.onload = () => {
-            carregarCobrancas(5);
-        };
+        // LEITOR INTELIGENTE DA SUA PLANILHA EXATA
+        window.processarPlanilha = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('btnImportarText').innerText = "Importando...";
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                
+                // Vai procurar exatamente pelas abas que você criou no Excel
+                const abasFinanceiro = ['DIA 5', 'DIA 20'];
+                let salvos = 0;
+
+                for (let nomeAba of abasFinanceiro) {
+                    if (!workbook.Sheets[nomeAba]) continue;
+                    
+                    const diaVencimento = nomeAba.includes('5') ? 5 : 20;
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba]);
+                    
+                    for (let linha of json) {
+                        if (!linha['CLIENTE']) continue; 
+                        
+                        let quantParStr = String(linha['QUANT PAR'] || '1/1');
+                        let parcelasPagas = 1;
+                        let totalParcelas = 1;
+                        
+                        // Quebra a string "1/5" que vem do seu Excel
+                        if (quantParStr.includes('/')) {
+                            let partes = quantParStr.split('/');
+                            parcelasPagas = parseInt(partes[0]) || 1;
+                            totalParcelas = parseInt(partes[1]) || 1;
+                        }
+
+                        // Função para garantir que moedas do Brasil virem números
+                        const parseMoeda = (val) => {
+                            if (typeof val === 'number') return val;
+                            if (!val) return 0;
+                            let str = String(val).replace('R$', '').trim();
+                            if (str.includes(',') && !str.includes('.')) str = str.replace(',', '.');
+                            else if (str.includes('.') && str.includes(',')) str = str.replace(/\./g, '').replace(',', '.');
+                            return parseFloat(str) || 0;
+                        };
+
+                        let valorParcela = parseMoeda(linha['VALOR PARCELA']);
+                        let valorRecebido = parseMoeda(linha['TOTAL RECEBIDO']);
+                        
+                        let status = valorRecebido >= valorParcela ? 'pago' : 'pendente';
+
+                        try {
+                            await addDoc(collection(db, "cobrancas"), {
+                                cliente_id: String(linha['CLIENTE']),
+                                marca: String(linha['MARCA'] || '-'),
+                                cnpj: String(linha['CNPJ'] || ''),
+                                dia_vencimento: diaVencimento,
+                                valor_total: valorParcela,
+                                valor_pago: valorRecebido,
+                                quantidade_parcelas: totalParcelas,
+                                parcelas_pagas: parcelasPagas,
+                                status_pagamento: status
+                            });
+                            salvos++;
+                        } catch (err) {
+                            console.error("Erro ao salvar linha:", err);
+                        }
+                    }
+                }
+                
+                alert(`Sucesso! ${salvos} cobranças foram importadas diretamente para o ciclo dos dias 5 e 20.`);
+                document.getElementById('btnImportarText').innerText = "Importar Planilha Excel";
+                carregarCobrancas(cicloAtual);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        window.onload = () => { carregarCobrancas(5); };
     </script>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -122,11 +191,22 @@
         </div>
 
         <div class="bg-white p-6 rounded-t-xl shadow-sm border border-gray-200 border-b-0">
-            <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
                 <h2 class="text-lg font-semibold text-gray-800">Faturamento por Vencimento</h2>
-                <div class="flex gap-2">
-                    <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow transition-colors">Ciclo Dia 5</button>
-                    <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors">Ciclo Dia 20</button>
+                
+                <div class="flex flex-wrap gap-4 items-center">
+                    <div class="flex gap-2 bg-gray-100 p-1 rounded-lg">
+                        <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow transition-colors">Ciclo Dia 5</button>
+                        <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-transparent text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors">Ciclo Dia 20</button>
+                    </div>
+
+                    <div>
+                        <input type="file" id="uploadExcel" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event)" />
+                        <label for="uploadExcel" class="cursor-pointer px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium shadow transition-colors flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            <span id="btnImportarText">Importar DATA DE PAGAMENTO</span>
+                        </label>
+                    </div>
                 </div>
             </div>
         </div>
@@ -136,10 +216,12 @@
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ID Cliente</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Cliente</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Marca</th>
                             <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Vencimento</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Valor Total</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Valor Parcela</th>
                             <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Valor Pago</th>
+                            <th class="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Parcelas</th>
                             <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
                         </tr>
                     </thead>
@@ -151,6 +233,5 @@
         </div>
 
     </main>
-
 </body>
 </html>
