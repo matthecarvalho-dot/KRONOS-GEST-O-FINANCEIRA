@@ -353,14 +353,14 @@
         let cacheClientes = [];
         window.carregarClientes = async function() {
             const tabela = document.getElementById('tabelaClientes');
-            tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-slate-400">Carregando clientes...</td></tr>`;
+            tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-slate-400">Carregando clientes...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "clientes"));
                 cacheClientes = [];
                 let totalCli = 0, assinadoCount = 0, pendenteCount = 0;
 
                 if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-slate-400">Nenhum cliente cadastrado. Adicione manualmente ou importe.</td></tr>`;
+                    tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-slate-400">Nenhum cliente cadastrado. Adicione manualmente ou importe.</td></tr>`;
                     atualizarDashboardClientes(0, 0, 0);
                     return;
                 }
@@ -376,21 +376,28 @@
 
                 renderizarTabelaClientes(cacheClientes);
                 atualizarDashboardClientes(totalCli, assinadoCount, pendenteCount);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-rose-500">Erro ao carregar.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-rose-500">Erro ao carregar.</td></tr>`; }
         }
 
         window.renderizarTabelaClientes = function(dados) {
             const tabela = document.getElementById('tabelaClientes');
             tabela.innerHTML = '';
             if (dados.length === 0) {
-                tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-slate-400">Nenhum cliente encontrado.</td></tr>`;
+                tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-slate-400">Nenhum cliente encontrado.</td></tr>`;
                 return;
             }
             dados.forEach(data => {
                 let docStatus = String(data.documento || '').toUpperCase();
                 let badgeDoc = docStatus.includes('ASSINADO') 
-                    ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-md">ASSINADO</span>'
-                    : '<span class="px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded-md">PENDENTE</span>';
+                    ? '<span class="px-2 py-0.5 text-[11px] font-bold bg-emerald-100 text-emerald-800 rounded">ASSINADO</span>'
+                    : '<span class="px-2 py-0.5 text-[11px] font-bold bg-amber-100 text-amber-800 rounded">PENDENTE</span>';
+
+                let statusCliente = data.status_cliente || 'Pagante';
+                let corStatus = 'bg-blue-100 text-blue-800';
+                if (statusCliente === 'Quitado') corStatus = 'bg-purple-100 text-purple-800';
+                if (statusCliente === 'Inadimplente') corStatus = 'bg-amber-100 text-amber-800';
+                if (statusCliente === 'Negativado') corStatus = 'bg-rose-100 text-rose-800';
+                let badgeStatusCli = `<span class="px-2 py-1 text-xs font-extrabold ${corStatus} rounded-md">${statusCliente}</span>`;
 
                 tabela.innerHTML += `
                     <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
@@ -398,9 +405,10 @@
                         <td class="px-6 py-4 text-sm text-slate-600 font-medium">${data.marca || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-500">${data.cnpj || ''}</td>
                         <td class="px-6 py-4 text-sm">${badgeDoc}</td>
+                        <td class="px-6 py-4 text-sm">${badgeStatusCli}</td>
                         <td class="px-6 py-4 text-sm text-slate-600 font-semibold">${data.vendedora || ''}</td>
                         <td class="px-6 py-4 text-sm text-right space-x-2">
-                            <button onclick="abrirModalEditarCliente('${data.id}', \`${data.cliente || ''}\`, \`${data.marca || ''}\`, \`${data.cnpj || ''}\`, \`${data.documento || ''}\`, \`${data.vendedora || ''}\`)" class="px-3 py-1 bg-slate-100 hover:bg-[#0B192C] hover:text-[#D4AF37] text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all">Editar</button>
+                            <button onclick="abrirModalEditarCliente('${data.id}', \`${data.cliente || ''}\`, \`${data.marca || ''}\`, \`${data.cnpj || ''}\`, \`${data.documento || ''}\`, \`${data.status_cliente || 'Pagante'}\`, \`${data.vendedora || ''}\`)" class="px-3 py-1 bg-slate-100 hover:bg-[#0B192C] hover:text-[#D4AF37] text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all">Editar</button>
                             <button onclick="excluirCliente('${data.id}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg transition-all">Excluir</button>
                         </td>
                     </tr>
@@ -409,18 +417,20 @@
         }
 
         window.abrirModalCliente = function() {
-            document.getElementById('formClienteModal').reset();
+            const form = document.getElementById('formCliente');
+            if(form) form.reset();
             document.getElementById('cliDocId').value = '';
             document.getElementById('modalClienteTitulo').innerText = 'Novo Cliente';
             document.getElementById('modalCliente').classList.remove('hidden');
         }
 
-        window.abrirModalEditarCliente = function(id, cliente, marca, cnpj, documento, vendedora) {
+        window.abrirModalEditarCliente = function(id, cliente, marca, cnpj, documento, statusCli, vendedora) {
             document.getElementById('cliDocId').value = id;
             document.getElementById('cliNome').value = cliente;
             document.getElementById('cliMarca').value = marca;
             document.getElementById('cliCnpj').value = cnpj;
             document.getElementById('cliStatusDoc').value = documento;
+            document.getElementById('cliStatusCliente').value = statusCli || 'Pagante';
             document.getElementById('cliVendedora').value = vendedora;
             document.getElementById('modalClienteTitulo').innerText = 'Editar Cliente';
             document.getElementById('modalCliente').classList.remove('hidden');
@@ -437,14 +447,15 @@
             const marca = document.getElementById('cliMarca').value.trim();
             const cnpj = document.getElementById('cliCnpj').value.trim();
             const documento = document.getElementById('cliStatusDoc').value.trim();
+            const status_cliente = document.getElementById('cliStatusCliente').value;
             const vendedora = document.getElementById('cliVendedora').value.trim();
 
             try {
                 if (docId) {
-                    await updateDoc(doc(db, "clientes", docId), { cliente, marca, cnpj, documento, vendedora });
+                    await updateDoc(doc(db, "clientes", docId), { cliente, marca, cnpj, documento, status_cliente, vendedora });
                     alert("Cliente atualizado com sucesso!");
                 } else {
-                    await addDoc(collection(db, "clientes"), { cliente, marca, cnpj, documento, vendedora });
+                    await addDoc(collection(db, "clientes"), { cliente, marca, cnpj, documento, status_cliente, vendedora });
                     alert("Cliente cadastrado com sucesso!");
                 }
                 fecharModalCliente();
@@ -466,6 +477,7 @@
                 String(item.cliente || '').toLowerCase().includes(termo) || 
                 String(item.marca || '').toLowerCase().includes(termo) ||
                 String(item.cnpj || '').toLowerCase().includes(termo) ||
+                String(item.status_cliente || '').toLowerCase().includes(termo) ||
                 String(item.vendedora || '').toLowerCase().includes(termo)
             );
             renderizarTabelaClientes(filtrados);
@@ -475,9 +487,9 @@
             let janela = window.open('', '_blank');
             janela.document.write(`<html><head><title>Relatório Geral de Clientes</title><script src="https://cdn.tailwindcss.com"><' + '/script></head><body class="p-10 font-sans">`);
             janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório Geral de Clientes</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
-            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">CNPJ</th><th class="border p-2">Documento</th><th class="border p-2">Vendedora</th></tr>`);
+            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">CNPJ</th><th class="border p-2">Documento</th><th class="border p-2">Status</th><th class="border p-2">Vendedora</th></tr>`);
             cacheClientes.forEach(c => {
-                janela.document.write(`<tr><td class="border p-2 font-bold">${c.cliente}</td><td class="border p-2">${c.marca}</td><td class="border p-2">${c.cnpj}</td><td class="border p-2 uppercase font-bold">${c.documento}</td><td class="border p-2">${c.vendedora}</td></tr>`);
+                janela.document.write(`<tr><td class="border p-2 font-bold">${c.cliente}</td><td class="border p-2">${c.marca}</td><td class="border p-2">${c.cnpj}</td><td class="border p-2 uppercase font-bold">${c.documento}</td><td class="border p-2 font-bold">${c.status_cliente || 'Pagante'}</td><td class="border p-2">${c.vendedora}</td></tr>`);
             });
             janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#0B192C] text-white rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
@@ -816,7 +828,7 @@
             } catch (e) { alert("Erro ao excluir."); }
         }
 
-        // --- IMPORTADOR UNIVERSAL ---
+        // --- IMPORTADOR UNIVERSAL ROBUSTO ---
         window.processarPlanilha = function(event, modulo) {
             const file = event.target.files[0];
             if (!file) return;
@@ -883,7 +895,10 @@
                 }
 
                 if (modulo === 'clientes') {
-                    const aba = workbook.Sheets['BASE DE MARCAS '] || workbook.Sheets[workbook.SheetNames[0]];
+                    // Procura pela aba correta ou pega a primeira aba disponível de forma flexível
+                    let nomeAbaClientes = workbook.SheetNames.find(n => n.toUpperCase().includes('MARCA') || n.toUpperCase().includes('CLIENTE')) || workbook.SheetNames[0];
+                    const aba = workbook.Sheets[nomeAbaClientes];
+                    
                     if (aba) {
                         const json = XLSX.utils.sheet_to_json(aba);
                         const snapshot = await getDocs(collection(db, "clientes"));
@@ -895,24 +910,26 @@
                         });
 
                         for (let linha of json) {
-                            if (!linha['CLIENTE']) continue;
-                            let cli = String(linha['CLIENTE']).trim();
-                            let marca = String(linha['MARCA'] || '-').trim();
-                            let cnpj = String(linha['CNPJ'] || '-').trim();
-                            let documento = String(linha['DOCUMENTO'] || '-').trim();
-                            let vendedora = String(linha['VENDEDORA'] || '-').trim();
+                            // Mapeia flexivelmente chaves que possam ter nomes ligeiramente diferentes nas planilhas do usuário
+                            let cli = String(linha['CLIENTE'] || linha['Cliente'] || linha['NOME'] || linha['Nome'] || '').trim();
+                            if (!cli) continue;
+                            let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
+                            let cnpj = String(linha['CNPJ'] || linha['Cnpj'] || '-').trim();
+                            let documento = String(linha['DOCUMENTO'] || linha['Documento'] || linha['CONTRATO'] || '-').trim();
+                            let statusCli = String(linha['STATUS'] || linha['Status'] || linha['SITUAÇÃO'] || linha['Situação'] || 'Pagante').trim();
+                            let vendedora = String(linha['VENDEDORA'] || linha['Vendedora'] || linha['RESPONSÁVEL'] || '-').trim();
 
                             const key = (cnpj && cnpj !== '-') ? cnpj : (cli + '_' + marca).toUpperCase();
 
                             if (mapClientes.has(key)) {
                                 const docId = mapClientes.get(key);
                                 await updateDoc(doc(db, "clientes", docId), {
-                                    cliente: cli, marca: marca, cnpj: cnpj, documento: documento, vendedora: vendedora
+                                    cliente: cli, marca: marca, cnpj: cnpj, documento: documento, status_cliente: statusCli, vendedora: vendedora
                                 });
                                 salvos++;
                             } else {
                                 const docRef = await addDoc(collection(db, "clientes"), {
-                                    cliente: cli, marca: marca, cnpj: cnpj, documento: documento, vendedora: vendedora
+                                    cliente: cli, marca: marca, cnpj: cnpj, documento: documento, status_cliente: statusCli, vendedora: vendedora
                                 });
                                 mapClientes.set(key, docRef.id);
                                 salvos++;
@@ -1061,7 +1078,7 @@
         <div class="bg-white rounded-3xl shadow-2xl p-10 max-w-md w-full border border-slate-100 text-center relative overflow-hidden">
             <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#0B192C] via-[#D4AF37] to-[#0B192C]"></div>
             
-            <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-18 h-18 w-20 h-20 rounded-2xl object-cover shadow-lg border-2 border-[#D4AF37] mx-auto mb-4">
+            <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-20 h-20 rounded-2xl object-cover shadow-lg border-2 border-[#D4AF37] mx-auto mb-4">
             <h2 class="text-2xl font-black text-[#0B192C] tracking-tight">KRONOS GS</h2>
             <p class="text-[#D4AF37] text-[10px] uppercase tracking-[0.3em] font-extrabold mt-1">ERP Executive Suite</p>
             
@@ -1179,7 +1196,7 @@
             <div id="modalCliente" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
                 <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 border border-slate-100 relative">
                     <h3 id="modalClienteTitulo" class="text-xl font-black text-[#0B192C] mb-6">Novo Cliente</h3>
-                    <form onsubmit="salvarClienteManual(event)" class="space-y-4">
+                    <form id="formCliente" onsubmit="salvarClienteManual(event)" class="space-y-4">
                         <input type="hidden" id="cliDocId">
                         <div>
                             <label class="block text-xs font-extrabold text-slate-500 uppercase">Nome do Cliente</label>
@@ -1201,9 +1218,18 @@
                                 <input type="text" id="cliStatusDoc" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" placeholder="EX: ASSINADO ou PENDENTE">
                             </div>
                             <div>
-                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Vendedora</label>
-                                <input type="text" id="cliVendedora" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
+                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Status do Cliente</label>
+                                <select id="cliStatusCliente" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C] bg-white">
+                                    <option value="Pagante">Pagante</option>
+                                    <option value="Quitado">Quitado</option>
+                                    <option value="Inadimplente">Inadimplente</option>
+                                    <option value="Negativado">Negativado</option>
+                                </select>
                             </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-extrabold text-slate-500 uppercase">Vendedora</label>
+                            <input type="text" id="cliVendedora" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
                         </div>
                         <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
                             <button type="button" onclick="fecharModalCliente()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">Cancelar</button>
@@ -1217,7 +1243,7 @@
             <div id="modalCobranca" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
                 <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 border border-slate-100 relative">
                     <h3 class="text-xl font-black text-[#0B192C] mb-6">Nova Cobrança / Faturamento</h3>
-                    <form onsubmit="salvarCobrancaManual(event)" class="space-y-4">
+                    <form id="formCobrancaManual" onsubmit="salvarCobrancaManual(event)" class="space-y-4">
                         <div>
                             <label class="block text-xs font-extrabold text-slate-500 uppercase">Cliente</label>
                             <input type="text" id="cobCliente" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
@@ -1324,10 +1350,10 @@
                 <div class="flex justify-between items-center mb-10">
                     <div>
                         <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Base Geral de Clientes</h2>
-                        <p class="text-slate-500 mt-1">Gestão completa de contatos, contratos, cadastro manual e vendedoras.</p>
+                        <p class="text-slate-500 mt-1">Gestão de contatos, contratos, status (Pagante, Quitado, Inadimplente, Negativado) e vendedoras.</p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="text" id="buscaClientes" onkeyup="filtrarClientes()" placeholder="🔍 Pesquisar cliente, marca, CNPJ..." class="px-4 py-2.5 border border-slate-200 bg-slate-50/50 rounded-xl text-sm focus:outline-none focus:border-[#0B192C] focus:bg-white w-64 shadow-sm">
+                        <input type="text" id="buscaClientes" onkeyup="filtrarClientes()" placeholder="🔍 Pesquisar cliente, status, marca..." class="px-4 py-2.5 border border-slate-200 bg-slate-50/50 rounded-xl text-sm focus:outline-none focus:border-[#0B192C] focus:bg-white w-64 shadow-sm">
                         <button onclick="abrirModalCliente()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-sm transition-all">+ Novo Cliente</button>
                         <button onclick="gerarRelatorioClientes()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-sm shadow-sm transition-all">Relatório</button>
                         <input type="file" id="upClientes" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'clientes')" />
@@ -1360,6 +1386,7 @@
                                 <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
                                 <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">CNPJ</th>
                                 <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Documento</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status do Cliente</th>
                                 <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Vendedora</th>
                                 <th class="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Ações</th>
                             </tr>
