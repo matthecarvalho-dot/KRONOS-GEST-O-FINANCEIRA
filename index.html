@@ -35,7 +35,7 @@
         let cicloAtual = 5;
         let rpiCache = [];
 
-        // --- CONTROLE DE AUTENTICAÇÃO E SEGURANÇA COM VERIFICAÇÃO DE BLOQUEIO ---
+        // --- CONTROLE DE AUTENTICAÇÃO E SEGURANÇA ---
         onAuthStateChanged(auth, async (user) => {
             const telaLogin = document.getElementById('tela-login');
             const appContainer = document.getElementById('app-container');
@@ -43,7 +43,6 @@
             if (user) {
                 const userEmail = (user.email || "").toLowerCase().trim();
                 
-                // Se não for admin, verifica se está bloqueado no Firestore
                 if (userEmail !== EMAIL_ADMIN) {
                     try {
                         const q = query(collection(db, "usuarios_cadastrados"), where("email", "==", userEmail));
@@ -593,7 +592,7 @@
             janela.document.close();
         }
 
-        // --- GESTÃO DE USUÁRIOS (ADMIN) COM BLOQUEIO, EDIÇÃO DE NOME E EXCLUSÃO ---
+        // --- GESTÃO DE USUÁRIOS (ADMIN) ---
         window.carregarUsuariosAdmin = async function() {
             const container = document.getElementById('listaUsuariosAdmin');
             container.innerHTML = `
@@ -1068,7 +1067,6 @@
                         <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow">Ciclo Dia 5</button>
                         <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-semibold hover:bg-slate-50">Ciclo Dia 20</button>
                     </div>
-                    <!-- BARRA DE PESQUISA E RELATÓRIO -->
                     <div class="flex flex-wrap items-center gap-3">
                         <input type="text" id="buscaCobrancas" onkeyup="filtrarCobrancas()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
                         <button onclick="gerarRelatorioCobrancas()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md font-semibold text-sm shadow">Gerar Relatório</button>
