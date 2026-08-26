@@ -11,7 +11,7 @@
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, getDocs, query, where, addDoc, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, query, where, addDoc, doc, updateDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, setPersistence, browserLocalPersistence, browserSessionPersistence, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
         const firebaseConfig = {
@@ -234,12 +234,13 @@
                 tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-slate-400">Nenhum registro encontrado.</td></tr>`;
                 return;
             }
+            let html = '';
             dados.forEach(data => {
                 const badge = data.status_pagamento === 'pago' 
                     ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-md">PAGO</span>' 
                     : '<span class="px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded-md">PENDENTE</span>';
                 
-                tabela.innerHTML += `
+                html += `
                     <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
                         <td class="px-6 py-4 text-sm text-slate-800 font-bold">${String(data.cliente_id || '').substring(0, 25)}</td>
                         <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
@@ -255,6 +256,7 @@
                     </tr>
                 `;
             });
+            tabela.innerHTML = html;
         }
 
         window.filtrarCobrancas = function() {
@@ -386,14 +388,17 @@
                 tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-slate-400">Nenhum registro encontrado.</td></tr>`;
                 return;
             }
-            dados.forEach(data => {
+            let html = '';
+            // Renderiza até 500 registros para garantir alta performance sem travar o navegador
+            const limiteRender = dados.slice(0, 500);
+            limiteRender.forEach(data => {
                 let st = String(data.status_cliente || 'QUITADO').toUpperCase();
                 let corStatus = 'bg-emerald-100 text-emerald-800';
                 if (st.includes('INADIMPLENTE')) corStatus = 'bg-amber-100 text-amber-800';
                 if (st.includes('NEGATIVADO') || st.includes('CANCELADO')) corStatus = 'bg-rose-100 text-rose-800';
                 let badgeStatus = `<span class="px-2.5 py-1 text-xs font-bold ${corStatus} rounded-md">${data.status_cliente || 'QUITADO'}</span>`;
 
-                tabela.innerHTML += `
+                html += `
                     <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
                         <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-600 font-medium">${data.empresa || data.marca || ''}</td>
@@ -408,6 +413,10 @@
                     </tr>
                 `;
             });
+            if (dados.length > 500) {
+                html += `<tr><td colspan="7" class="px-6 py-4 text-center text-xs text-amber-600 font-bold">Exibindo os primeiros 500 registros de ${dados.length}. Utilize a busca para refinar os resultados.</td></tr>`;
+            }
+            tabela.innerHTML = html;
         }
 
         window.abrirModalCliente = function() {
@@ -556,8 +565,9 @@
                 tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Nenhum processo encontrado.</td></tr>`;
                 return;
             }
-            filtrados.forEach(data => {
-                tabela.innerHTML += `
+            let html = '';
+            filtrados.slice(0, 500).forEach(data => {
+                html += `
                     <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
                         <td class="px-6 py-4 text-sm font-mono text-slate-600 font-semibold">${data.processo || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.marca || ''}</td>
@@ -565,6 +575,7 @@
                     </tr>
                 `;
             });
+            tabela.innerHTML = html;
         }
 
         window.gerarRelatorioRPI = function() {
@@ -604,12 +615,13 @@
                 tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum registro encontrado.</td></tr>`;
                 return;
             }
-            dados.forEach(data => {
+            let html = '';
+            dados.slice(0, 500).forEach(data => {
                 const badgeStatus = data.status_pagamento === 'pago' 
                     ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-md">PAGO</span>' 
                     : '<span class="px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded-md">PENDENTE</span>';
 
-                tabela.innerHTML += `
+                html += `
                     <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
                         <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
@@ -627,6 +639,7 @@
                     </tr>
                 `;
             });
+            tabela.innerHTML = html;
         }
 
         window.alternarStatusGRU = async function(docId, statusAtual) {
@@ -693,8 +706,9 @@
                 tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum registro encontrado.</td></tr>`;
                 return;
             }
-            dados.forEach(data => {
-                tabela.innerHTML += `
+            let html = '';
+            dados.slice(0, 500).forEach(data => {
+                html += `
                     <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
                         <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
@@ -704,6 +718,7 @@
                     </tr>
                 `;
             });
+            tabela.innerHTML = html;
         }
 
         window.filtrarMensal = function() {
@@ -821,269 +836,209 @@
             } catch (e) { alert("Erro ao excluir."); }
         }
 
-        // --- IMPORTADOR UNIVERSAL PARA TODAS AS ABAS ---
+        // --- IMPORTADOR UNIVERSAL OTIMIZADO COM BATCH WRITES ---
         window.processarPlanilha = function(event, modulo) {
             const file = event.target.files[0];
             if (!file) return;
             let btnTextId = event.target.id + 'Text';
             let textoOriginal = document.getElementById(btnTextId).innerText;
-            document.getElementById(btnTextId).innerText = "Processando...";
+            document.getElementById(btnTextId).innerText = "Processando em lote...";
 
             const reader = new FileReader();
             reader.onload = async function(e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, {type: 'array'});
-                let salvos = 0;
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
 
-                // 1. Módulo Cobranças (Dia 5 e Dia 20)
-                if (modulo === 'cobrancas') {
-                    const snapshot = await getDocs(collection(db, "cobrancas"));
-                    const mapCobrancas = new Map();
-                    snapshot.forEach(d => {
-                        const dat = d.data();
-                        const key = `${String(dat.cliente_id || '').trim()}_${dat.dia_vencimento}_${String(dat.marca || '').trim()}`.toUpperCase();
-                        mapCobrancas.set(key, d.id);
-                    });
-
-                    for (let nomeAba of ['DIA 5', 'DIA 20']) {
-                        if (!workbook.Sheets[nomeAba]) continue;
-                        const diaVencimento = nomeAba.includes('5') ? 5 : 20;
-                        const json = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba]);
-                        for (let linha of json) {
-                            if (!linha['CLIENTE']) continue; 
-                            let cliId = String(linha['CLIENTE']).trim();
-                            let marca = String(linha['MARCA'] || '-').trim();
-                            let quantParStr = String(linha['QUANT PAR'] || '1/1');
-                            let parcelasPagas = 1, totalParcelas = 1;
-                            if (quantParStr.includes('/')) {
-                                let partes = quantParStr.split('/');
-                                parcelasPagas = parseInt(partes[0]) || 1; totalParcelas = parseInt(partes[1]) || 1;
-                            }
-                            let valorParcela = parseFloat(String(linha['VALOR PARCELA']).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                            let valorRecebido = parseFloat(String(linha['TOTAL RECEBIDO']).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                            let status = valorRecebido >= (parcelasPagas * valorParcela) ? 'pago' : 'pendente';
-                            let cnpj = String(linha['CNPJ'] || '').trim();
-
-                            const key = `${cliId}_${diaVencimento}_${marca}`.toUpperCase();
-
-                            if (mapCobrancas.has(key)) {
-                                const docId = mapCobrancas.get(key);
-                                await updateDoc(doc(db, "cobrancas", docId), {
-                                    cliente_id: cliId, marca: marca, cnpj: cnpj, dia_vencimento: diaVencimento,
-                                    valor_total: valorParcela, valor_pago: valorRecebido,
-                                    quantidade_parcelas: totalParcelas, parcelas_pagas: parcelasPagas, status_pagamento: status
-                                });
-                                salvos++;
-                            } else {
-                                const docRef = await addDoc(collection(db, "cobrancas"), {
-                                    cliente_id: cliId, marca: marca, cnpj: cnpj, dia_vencimento: diaVencimento,
-                                    valor_total: valorParcela, valor_pago: valorRecebido,
-                                    quantidade_parcelas: totalParcelas, parcelas_pagas: parcelasPagas, status_pagamento: status
-                                });
-                                mapCobrancas.set(key, docRef.id);
-                                salvos++;
-                            }
-                        }
-                    }
-                    carregarCobrancas(cicloAtual);
-                }
-
-                // 2. Módulo Base de Marcas Financeiro (Abas: BASE MARCAS FINANCEIRO / CONTRATOS CANCELADOS)
-                if (modulo === 'clientes') {
-                    let nomeAbaClientes = workbook.SheetNames.find(n => n.toUpperCase().includes('BASE MARCAS') || n.toUpperCase().includes('FINANCEIRO')) || workbook.SheetNames[0];
-                    const aba = workbook.Sheets[nomeAbaClientes];
-                    
-                    if (aba) {
-                        const json = XLSX.utils.sheet_to_json(aba);
-                        const snapshot = await getDocs(collection(db, "clientes"));
-                        const mapClientes = new Map();
+                    // Função auxiliar para executar gravações em lotes de 400 (limite do Firestore é 500)
+                    async function executarEmLotes(colecaoStr, listaDados, chaveUnicaFunc) {
+                        const colRef = collection(db, colecaoStr);
+                        const snapshot = await getDocs(colRef);
+                        const mapaExistentes = new Map();
                         snapshot.forEach(d => {
-                            const dat = d.data();
-                            const key = (String(dat.cliente || '') + '_' + String(dat.empresa || dat.marca || '')).trim().toUpperCase();
-                            mapClientes.set(key, d.id);
+                            mapaExistentes.set(chaveUnicaFunc(d.data()), d.ref);
                         });
 
-                        for (let linha of json) {
-                            let cli = String(linha['CLIENTE'] || linha['Cliente'] || linha['NOME'] || '').trim();
-                            if (!cli) continue;
-                            let empresa = String(linha['EMPRESA'] || linha['Empresa'] || linha['MARCA'] || linha['Marca'] || '-').trim();
-                            let telefone = String(linha['TEL.'] || linha['Tel'] || linha['TELEFONE'] || '').trim();
-                            let valorPc = parseFloat(String(linha['VALOR PC'] || linha['Valor Pc'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                            let statusCli = String(linha['STATUS'] || linha['Status'] || 'QUITADO').trim();
-                            let anuidade = String(linha['ANUIDADE'] || linha['Anuidade'] || '').trim();
+                        let batch = writeBatch(db);
+                        let contadorOp = 0;
 
-                            const key = (cli + '_' + empresa).toUpperCase();
-
-                            if (mapClientes.has(key)) {
-                                const docId = mapClientes.get(key);
-                                await updateDoc(doc(db, "clientes", docId), {
-                                    cliente: cli, empresa: empresa, marca: empresa, telefone: telefone, valor_pc: valorPc, status_cliente: statusCli, anuidade: anuidade
-                                });
-                                salvos++;
+                        for (let item of listaDados) {
+                            let chave = chaveUnicaFunc(item);
+                            if (mapaExistentes.has(chave)) {
+                                batch.update(mapaExistentes.get(chave), item);
                             } else {
-                                const docRef = await addDoc(collection(db, "clientes"), {
-                                    cliente: cli, empresa: empresa, marca: empresa, telefone: telefone, valor_pc: valorPc, status_cliente: statusCli, anuidade: anuidade
-                                });
-                                mapClientes.set(key, docRef.id);
-                                salvos++;
+                                let novoRef = doc(colRef);
+                                batch.set(novoRef, item);
+                            }
+                            contadorOp++;
+                            if (contadorOp >= 400) {
+                                await batch.commit();
+                                batch = writeBatch(db);
+                                contadorOp = 0;
                             }
                         }
-                    }
-
-                    // Também lê aba de CONTRATOS CANCELADOS se existir
-                    let nomeAbaCancelados = workbook.SheetNames.find(n => n.toUpperCase().includes('CANCELADOS'));
-                    if (nomeAbaCancelados && workbook.Sheets[nomeAbaCancelados]) {
-                        const jsonCanc = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAbaCancelados]);
-                        for (let linha of jsonCanc) {
-                            let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
-                            if (!cli) continue;
-                            let empresa = String(linha['EMPRESA'] || linha['Empresa'] || '-').trim();
-                            let telefone = String(linha['TEL.'] || linha['Tel'] || '').trim();
-                            let valorPc = parseFloat(String(linha['VALOR PC'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                            let anuidade = String(linha['ANUIDADE'] || '').trim();
-
-                            const key = (cli + '_' + empresa).toUpperCase();
-                            await addDoc(collection(db, "clientes"), {
-                                cliente: cli, empresa: empresa, marca: empresa, telefone: telefone, valor_pc: valorPc, status_cliente: 'CANCELADO', anuidade: anuidade
-                            });
-                            salvos++;
+                        if (contadorOp > 0) {
+                            await batch.commit();
                         }
                     }
 
-                    carregarClientes();
-                }
-
-                // 3. Módulo RPI (INPI)
-                if (modulo === 'rpi') {
-                    const snapshot = await getDocs(collection(db, "rpi_marcas"));
-                    const mapRpi = new Map();
-                    snapshot.forEach(d => {
-                        const dat = d.data();
-                        if (dat.processo) mapRpi.set(String(dat.processo).trim(), d.id);
-                    });
-
-                    for (let sheetName of workbook.SheetNames) {
-                        const sheet = workbook.Sheets[sheetName];
-                        const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
-                        let currentPhase = "GERAL";
-                        
-                        for (let r = 0; r < rows.length; r++) {
-                            let row = rows[r];
-                            for (let c = 0; c < row.length; c += 4) {
-                                let valCol0 = row[c] ? String(row[c]).trim() : "";
-                                let valCol1 = row[c+1] ? String(row[c+1]).trim() : "";
-
-                                if (valCol0 && !/^\d+$/.test(valCol0) && valCol0.length > 3) {
-                                    currentPhase = valCol0;
+                    if (modulo === 'cobrancas') {
+                        let itensCobranca = [];
+                        for (let nomeAba of ['DIA 5', 'DIA 20']) {
+                            if (!workbook.Sheets[nomeAba]) continue;
+                            const diaVencimento = nomeAba.includes('5') ? 5 : 20;
+                            const json = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba]);
+                            for (let linha of json) {
+                                if (!linha['CLIENTE']) continue; 
+                                let cliId = String(linha['CLIENTE']).trim();
+                                let marca = String(linha['MARCA'] || '-').trim();
+                                let quantParStr = String(linha['QUANT PAR'] || '1/1');
+                                let parcelasPagas = 1, totalParcelas = 1;
+                                if (quantParStr.includes('/')) {
+                                    let partes = quantParStr.split('/');
+                                    parcelasPagas = parseInt(partes[0]) || 1; totalParcelas = parseInt(partes[1]) || 1;
                                 }
-                                if (valCol0 && /^\d+$/.test(valCol0) && valCol1) {
-                                    let processo = valCol0;
-                                    let marca = valCol1;
-                                    let fase = currentPhase.toUpperCase();
+                                let valorParcela = parseFloat(String(linha['VALOR PARCELA']).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+                                let valorRecebido = parseFloat(String(linha['TOTAL RECEBIDO']).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+                                let status = valorRecebido >= (parcelasPagas * valorParcela) ? 'pago' : 'pendente';
+                                let cnpj = String(linha['CNPJ'] || '').trim();
 
-                                    if (mapRpi.has(processo)) {
-                                        const docId = mapRpi.get(processo);
-                                        await updateDoc(doc(db, "rpi_marcas", docId), { marca: marca, fase: fase });
-                                        salvos++;
-                                    } else {
-                                        const docRef = await addDoc(collection(db, "rpi_marcas"), { processo: processo, marca: marca, fase: fase });
-                                        mapRpi.set(processo, docRef.id);
-                                        salvos++;
+                                itensCobranca.push({
+                                    cliente_id: cliId, marca: marca, cnpj: cnpj, dia_vencimento: diaVencimento,
+                                    valor_total: valorParcela, valor_pago: valorRecebido,
+                                    quantidade_parcelas: totalParcelas, parcelas_pagas: parcelasPagas, status_pagamento: status
+                                });
+                            }
+                        }
+                        await executarEmLotes("cobrancas", itensCobranca, (d) => `${String(d.cliente_id || '').trim()}_${d.dia_vencimento}_${String(d.marca || '').trim()}`.toUpperCase());
+                        carregarCobrancas(cicloAtual);
+                    }
+
+                    if (modulo === 'clientes') {
+                        let itensClientes = [];
+                        let nomeAbaClientes = workbook.SheetNames.find(n => n.toUpperCase().includes('BASE MARCAS') || n.toUpperCase().includes('FINANCEIRO')) || workbook.SheetNames[0];
+                        const aba = workbook.Sheets[nomeAbaClientes];
+                        
+                        if (aba) {
+                            const json = XLSX.utils.sheet_to_json(aba);
+                            for (let linha of json) {
+                                let cli = String(linha['CLIENTE'] || linha['Cliente'] || linha['NOME'] || '').trim();
+                                if (!cli) continue;
+                                let empresa = String(linha['EMPRESA'] || linha['Empresa'] || linha['MARCA'] || linha['Marca'] || '-').trim();
+                                let telefone = String(linha['TEL.'] || linha['Tel'] || linha['TELEFONE'] || '').trim();
+                                let valorPc = parseFloat(String(linha['VALOR PC'] || linha['Valor Pc'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+                                let statusCli = String(linha['STATUS'] || linha['Status'] || 'QUITADO').trim();
+                                let anuidade = String(linha['ANUIDADE'] || linha['Anuidade'] || '').trim();
+
+                                itensClientes.push({
+                                    cliente: cli, empresa: empresa, marca: empresa, telefone: telefone, valor_pc: valorPc, status_cliente: statusCli, anuidade: anuidade
+                                });
+                            }
+                        }
+
+                        let nomeAbaCancelados = workbook.SheetNames.find(n => n.toUpperCase().includes('CANCELADOS'));
+                        if (nomeAbaCancelados && workbook.Sheets[nomeAbaCancelados]) {
+                            const jsonCanc = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAbaCancelados]);
+                            for (let linha of jsonCanc) {
+                                let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
+                                if (!cli) continue;
+                                let empresa = String(linha['EMPRESA'] || linha['Empresa'] || '-').trim();
+                                let telefone = String(linha['TEL.'] || linha['Tel'] || '').trim();
+                                let valorPc = parseFloat(String(linha['VALOR PC'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+                                let anuidade = String(linha['ANUIDADE'] || '').trim();
+
+                                itensClientes.push({
+                                    cliente: cli, empresa: empresa, marca: empresa, telefone: telefone, valor_pc: valorPc, status_cliente: 'CANCELADO', anuidade: anuidade
+                                });
+                            }
+                        }
+
+                        await executarEmLotes("clientes", itensClientes, (d) => `${String(d.cliente || '').trim()}_${String(d.empresa || d.marca || '').trim()}`.toUpperCase());
+                        carregarClientes();
+                    }
+
+                    if (modulo === 'rpi') {
+                        let itensRpi = [];
+                        for (let sheetName of workbook.SheetNames) {
+                            const sheet = workbook.Sheets[sheetName];
+                            const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
+                            let currentPhase = "GERAL";
+                            
+                            for (let r = 0; r < rows.length; r++) {
+                                let row = rows[r];
+                                for (let c = 0; c < row.length; c += 4) {
+                                    let valCol0 = row[c] ? String(row[c]).trim() : "";
+                                    let valCol1 = row[c+1] ? String(row[c+1]).trim() : "";
+
+                                    if (valCol0 && !/^\d+$/.test(valCol0) && valCol0.length > 3) {
+                                        currentPhase = valCol0;
+                                    }
+                                    if (valCol0 && /^\d+$/.test(valCol0) && valCol1) {
+                                        itensRpi.push({ processo: valCol0, marca: valCol1, fase: currentPhase.toUpperCase() });
                                     }
                                 }
                             }
                         }
+                        await executarEmLotes("rpi_marcas", itensRpi, (d) => String(d.processo || '').trim());
+                        carregarRPI();
                     }
-                    carregarRPI();
-                }
 
-                // 4. Módulo GRU
-                if (modulo === 'gru') {
-                    const snapshot = await getDocs(collection(db, "gru"));
-                    const mapGru = new Map();
-                    snapshot.forEach(d => {
-                        const dat = d.data();
-                        const key = `${String(dat.cliente || '').trim()}_${String(dat.marca || '').trim()}_${String(dat.vencimento || '').trim()}`.toUpperCase();
-                        mapGru.set(key, d.id);
-                    });
+                    if (modulo === 'gru') {
+                        let itensGru = [];
+                        const aba = workbook.Sheets[workbook.SheetNames[0]];
+                        if (aba) {
+                            const json = XLSX.utils.sheet_to_json(aba);
+                            for (let linha of json) {
+                                let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
+                                if (!cli) continue;
+                                let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
+                                let vencimento = String(linha['VENCIMENTO'] || linha['Vencimento'] || '-').trim();
 
-                    const aba = workbook.Sheets[workbook.SheetNames[0]];
-                    if (aba) {
-                        const json = XLSX.utils.sheet_to_json(aba);
-                        for (let linha of json) {
-                            let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
-                            if (!cli) continue;
-                            let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
-                            let vencimento = String(linha['VENCIMENTO'] || linha['Vencimento'] || '-').trim();
-
-                            const key = `${cli}_${marca}_${vencimento}`.toUpperCase();
-
-                            if (mapGru.has(key)) {
-                                const docId = mapGru.get(key);
-                                await updateDoc(doc(db, "gru", docId), { cliente: cli, marca: marca, vencimento: vencimento });
-                                salvos++;
-                            } else {
-                                const docRef = await addDoc(collection(db, "gru"), { 
-                                    cliente: cli, 
-                                    marca: marca, 
-                                    vencimento: vencimento, 
-                                    status_pagamento: 'pendente', 
-                                    anotacoes: '' 
+                                itensGru.push({
+                                    cliente: cli, marca: marca, vencimento: vencimento, status_pagamento: 'pendente', anotacoes: ''
                                 });
-                                mapGru.set(key, docRef.id);
-                                salvos++;
                             }
                         }
+                        await executarEmLotes("gru", itensGru, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.vencimento || '').trim()}`.toUpperCase());
+                        carregarGRU();
                     }
-                    carregarGRU();
-                }
 
-                // 5. Módulo Base Administrativo
-                if (modulo === 'mensal') {
-                    const snapshot = await getDocs(collection(db, "mensal"));
-                    const mapMensal = new Map();
-                    snapshot.forEach(d => {
-                        const dat = d.data();
-                        const key = `${String(dat.cliente || '').trim()}_${String(dat.marca || '').trim()}_${String(dat.data_pagamento || '').trim()}`.toUpperCase();
-                        mapMensal.set(key, d.id);
-                    });
+                    if (modulo === 'mensal') {
+                        let itensMensal = [];
+                        let nomeAbaAdm = workbook.SheetNames.find(n => n.toUpperCase().includes('ADMINISTRATIVO')) || workbook.SheetNames[0];
+                        const aba = workbook.Sheets[nomeAbaAdm];
+                        if (aba) {
+                            const json = XLSX.utils.sheet_to_json(aba);
+                            for (let linha of json) {
+                                let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
+                                if (!cli) continue;
+                                let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
+                                let valor = parseFloat(String(linha['VALOR'] || linha['Valor'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+                                let rawData = linha['DATA DE PAGAMENTO'] || linha['Data'] || '-';
+                                let formatedDate = rawData;
+                                if (typeof rawData === 'number') {
+                                    let dateObj = new Date((rawData - (25567 + 2))*86400*1000);
+                                    formatedDate = dateObj.toLocaleDateString('pt-BR');
+                                }
+                                let status = String(linha['STATUS'] || linha['Status'] || 'PAGO').trim();
+                                let dataPagamentoStr = String(formatedDate || '-').trim();
 
-                    let nomeAbaAdm = workbook.SheetNames.find(n => n.toUpperCase().includes('ADMINISTRATIVO')) || workbook.SheetNames[0];
-                    const aba = workbook.Sheets[nomeAbaAdm];
-                    if (aba) {
-                        const json = XLSX.utils.sheet_to_json(aba);
-                        for (let linha of json) {
-                            let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
-                            if (!cli) continue;
-                            let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
-                            let valor = parseFloat(String(linha['VALOR'] || linha['Valor'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                            let rawData = linha['DATA DE PAGAMENTO'] || linha['Data'] || '-';
-                            let formatedDate = rawData;
-                            if (typeof rawData === 'number') {
-                                let dateObj = new Date((rawData - (25567 + 2))*86400*1000);
-                                formatedDate = dateObj.toLocaleDateString('pt-BR');
-                            }
-                            let status = String(linha['STATUS'] || linha['Status'] || 'PAGO').trim();
-                            let dataPagamentoStr = String(formatedDate || '-').trim();
-
-                            const key = `${cli}_${marca}_${dataPagamentoStr}`.toUpperCase();
-
-                            if (mapMensal.has(key)) {
-                                const docId = mapMensal.get(key);
-                                await updateDoc(doc(db, "mensal", docId), { cliente: cli, marca: marca, valor: valor, data_pagamento: dataPagamentoStr, status: status });
-                                salvos++;
-                            } else {
-                                const docRef = await addDoc(collection(db, "mensal"), { cliente: cli, marca: marca, valor: valor, data_pagamento: dataPagamentoStr, status: status });
-                                mapMensal.set(key, docRef.id);
-                                salvos++;
+                                itensMensal.push({
+                                    cliente: cli, marca: marca, valor: valor, data_pagamento: dataPagamentoStr, status: status
+                                });
                             }
                         }
+                        await executarEmLotes("mensal", itensMensal, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.data_pagamento || '').trim()}`.toUpperCase());
+                        carregarMensal();
                     }
-                    carregarMensal();
-                }
 
-                alert(`Processo concluído com sucesso! Registros atualizados/inseridos.`);
-                document.getElementById(btnTextId).innerText = textoOriginal;
+                    alert(`Planilha importada com sucesso em lote!`);
+                } catch (err) {
+                    console.error(err);
+                    alert("Erro ao processar a planilha. Verifique o formato do arquivo.");
+                } finally {
+                    document.getElementById(btnTextId).innerText = textoOriginal;
+                }
             };
             reader.readAsArrayBuffer(file);
         }
