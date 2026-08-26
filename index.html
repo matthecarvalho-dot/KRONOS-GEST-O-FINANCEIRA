@@ -35,7 +35,7 @@
         let cicloAtual = 5;
         let rpiCache = [];
 
-        // --- CONTROLE DE AUTENTICAÇÃO E SEGURANÇA ---
+        // --- CONTROLE DE AUTENTICAÇÃO E SEGURANÇA COM VERIFICAÇÃO DE BLOQUEIO ---
         onAuthStateChanged(auth, async (user) => {
             const telaLogin = document.getElementById('tela-login');
             const appContainer = document.getElementById('app-container');
@@ -271,7 +271,7 @@
 
         window.gerarRelatorioCobrancas = function() {
             let janela = window.open('', '_blank');
-            janela.document.write(`<html><head><title>Relatório de Faturamento - Ciclo Dia ${cicloAtual}</title><script src="https://cdn.tailwindcss.com"></script></head><body class="p-10 font-sans">`);
+            janela.document.write(`<html><head><title>Relatório de Faturamento - Ciclo Dia ${cicloAtual}</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="p-10 font-sans">`);
             janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório de Faturamento - Ciclo Dia ${cicloAtual}</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
             janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">Valor Parcela</th><th class="border p-2">Valor Pago</th><th class="border p-2">Status</th></tr>`);
             cacheCobrancas.forEach(c => {
@@ -374,7 +374,7 @@
 
         window.gerarRelatorioClientes = function() {
             let janela = window.open('', '_blank');
-            janela.document.write(`<html><head><title>Relatório Geral de Clientes</title><script src="https://cdn.tailwindcss.com"></script></head><body class="p-10 font-sans">`);
+            janela.document.write(`<html><head><title>Relatório Geral de Clientes</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="p-10 font-sans">`);
             janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório Geral de Clientes</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
             janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">CNPJ</th><th class="border p-2">Documento</th><th class="border p-2">Vendedora</th></tr>`);
             cacheClientes.forEach(c => {
@@ -465,7 +465,7 @@
 
         window.gerarRelatorioRPI = function() {
             let janela = window.open('', '_blank');
-            janela.document.write(`<html><head><title>Relatório de Processos RPI</title><script src="https://cdn.tailwindcss.com"></script></head><body class="p-10 font-sans">`);
+            janela.document.write(`<html><head><title>Relatório de Processos RPI</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="p-10 font-sans">`);
             janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório de Processos RPI (INPI)</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
             janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Processo</th><th class="border p-2">Marca</th><th class="border p-2">Fase</th></tr>`);
             rpiCache.forEach(c => {
@@ -523,7 +523,7 @@
 
         window.gerarRelatorioGRU = function() {
             let janela = window.open('', '_blank');
-            janela.document.write(`<html><head><title>Relatório de Guias GRU</title><script src="https://cdn.tailwindcss.com"></script></head><body class="p-10 font-sans">`);
+            janela.document.write(`<html><head><title>Relatório de Guias GRU</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="p-10 font-sans">`);
             janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório de Guias GRU</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
             janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">Vencimento</th><th class="border p-2">Valor</th></tr>`);
             cacheGRU.forEach(c => {
@@ -582,7 +582,7 @@
 
         window.gerarRelatorioMensal = function() {
             let janela = window.open('', '_blank');
-            janela.document.write(`<html><head><title>Relatório Financeiro / Mensal</title><script src="https://cdn.tailwindcss.com"></script></head><body class="p-10 font-sans">`);
+            janela.document.write(`<html><head><title>Relatório Financeiro / Mensal</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="p-10 font-sans">`);
             janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório Financeiro / Mensal</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
             janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">Data</th><th class="border p-2">Valor</th><th class="border p-2">Status</th></tr>`);
             cacheMensal.forEach(c => {
