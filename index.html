@@ -35,7 +35,7 @@
         let cicloAtual = 5;
         let rpiCache = [];
 
-        // --- CONTROLE DE AUTENTICAÇÃO E PERSISTÊNCIA ---
+        // --- CONTROLE DE AUTENTICAÇÃO E SEGURANÇA ---
         onAuthStateChanged(auth, (user) => {
             const telaLogin = document.getElementById('tela-login');
             const appContainer = document.getElementById('app-container');
@@ -44,15 +44,17 @@
                 telaLogin.classList.add('hidden');
                 appContainer.classList.remove('hidden');
                 
+                const userEmail = (user.email || "").toLowerCase().trim();
                 const badgeRole = document.getElementById('badge-role');
+                const menuAdmin = document.getElementById('menu-admin');
                 
-                // Controle Rígido: Só o matthecarvalho@gmail.com é Admin
-                if (user.email === EMAIL_ADMIN) {
-                    document.getElementById('menu-admin').classList.remove('hidden');
+                // Validação estrita de Administrador
+                if (userEmail === EMAIL_ADMIN) {
+                    menuAdmin.classList.remove('hidden');
                     badgeRole.innerText = "⭐ Perfil: ADMINISTRADOR";
                     badgeRole.className = "text-xs font-bold text-[#D4AF37] mt-1";
                 } else {
-                    document.getElementById('menu-admin').classList.add('hidden');
+                    menuAdmin.classList.add('hidden');
                     badgeRole.innerText = "👤 Perfil: USUÁRIO";
                     badgeRole.className = "text-xs font-bold text-emerald-400 mt-1";
                 }
@@ -65,7 +67,7 @@
             }
         });
 
-        // Alternar entre Telas
+        // Alternar entre Telas de Autenticação
         window.mostrarPainelLogin = function(tipo) {
             document.getElementById('form-entrar').classList.add('hidden');
             document.getElementById('form-cadastro').classList.add('hidden');
@@ -91,7 +93,6 @@
 
             erroMsg.innerText = "Autenticando...";
             try {
-                // Se o checkbox estiver marcado, salva o login. Senão, expira ao fechar a aba.
                 const persistenceType = lembrar ? browserLocalPersistence : browserSessionPersistence;
                 await setPersistence(auth, persistenceType);
                 await signInWithEmailAndPassword(auth, email, senha);
@@ -113,7 +114,7 @@
 
             try {
                 await createUserWithEmailAndPassword(auth, email, senha);
-                sucessoMsg.innerText = "Conta de usuário criada! Faça login.";
+                sucessoMsg.innerText = "Conta criada com sucesso! Faça login.";
                 setTimeout(() => mostrarPainelLogin('entrar'), 2000);
             } catch (error) {
                 msg.innerText = "Erro ao cadastrar: A senha deve ter ao menos 6 caracteres.";
@@ -134,7 +135,7 @@
                 await sendPasswordResetEmail(auth, email);
                 sucessoMsg.innerText = "E-mail de recuperação enviado!";
             } catch (error) {
-                msg.innerText = "Erro ao enviar e-mail. Verifique se digitou corretamente.";
+                msg.innerText = "Erro ao enviar e-mail. Verifique o endereço.";
             }
         }
 
@@ -144,8 +145,19 @@
             });
         }
 
-        // --- NAVEGAÇÃO ENTRE ABAS ---
+        // --- NAVEGAÇÃO ENTRE ABAS COM BLINDAGEM DE ADMIN ---
         window.abrirAba = function(abaId) {
+            // Validação de segurança rigorosa para a aba admin
+            if (abaId === 'admin') {
+                const currentUser = auth.currentUser;
+                const currentEmail = currentUser ? (currentUser.email || "").toLowerCase().trim() : "";
+                if (currentEmail !== EMAIL_ADMIN) {
+                    alert("Acesso negado. Esta área é restrita exclusivamente ao administrador.");
+                    abrirAba('cobrancas');
+                    return;
+                }
+            }
+
             document.querySelectorAll('.aba-conteudo').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.btn-menu').forEach(el => {
                 el.className = 'btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent';
@@ -550,14 +562,14 @@
 </head>
 <body class="bg-slate-100 min-h-screen flex font-sans">
 
-    <!-- TELA DE LOGIN / CADASTRO / REDEFINIÇÃO COM SUPORTE A ENTER -->
+    <!-- TELA DE LOGIN / CADASTRO / REDEFINIÇÃO -->
     <div id="tela-login" class="fixed inset-0 bg-[#0B192C] z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-200 text-center relative">
             <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-16 h-16 rounded-xl object-cover shadow-md border-2 border-[#D4AF37] mx-auto mb-4">
             <h2 class="text-2xl font-black text-[#0B192C] tracking-wide">KRONOS GS</h2>
             <p class="text-slate-400 text-xs uppercase tracking-widest mt-1">ERP Executive Suite</p>
             
-            <!-- FORMULÁRIO DE ENTRADA (AGORA USANDO <form> PARA ACEITAR ENTER) -->
+            <!-- FORMULÁRIO DE ENTRADA -->
             <form id="form-entrar" class="mt-6 space-y-4 text-left block" onsubmit="event.preventDefault(); fazerLogin();">
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase">E-mail</label>
@@ -650,6 +662,7 @@
                 <button id="btn-mensal" onclick="abrirAba('mensal')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
                     💰 Financeiro / Mensal
                 </button>
+                <!-- BOTÃO ADMIN INICIALMENTE OCULTO (HIDDEN) -->
                 <button id="menu-admin" onclick="abrirAba('admin')" class="btn-menu hidden w-full flex items-center gap-3 px-4 py-3 text-amber-400 hover:bg-[#1E3E62] rounded-lg font-medium transition-all text-left border-l-4 border-amber-400">
                     🔐 Gestão de Usuários (Admin)
                 </button>
@@ -658,7 +671,6 @@
             <div class="p-6 space-y-3">
                 <div class="bg-[#1E3E62] rounded-lg p-4 text-center border border-[#2b527d]">
                     <p class="text-xs text-slate-300">Sistema Conectado</p>
-                    <!-- SELO DE USUÁRIO X ADMINISTRADOR -->
                     <p id="badge-role" class="text-xs font-bold mt-1"></p>
                 </div>
 
