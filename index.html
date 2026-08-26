@@ -48,7 +48,6 @@
                 const badgeRole = document.getElementById('badge-role');
                 const menuAdmin = document.getElementById('menu-admin');
                 
-                // Validação estrita de Administrador
                 if (userEmail === EMAIL_ADMIN) {
                     menuAdmin.classList.remove('hidden');
                     badgeRole.innerText = "⭐ Perfil: ADMINISTRADOR";
@@ -67,7 +66,6 @@
             }
         });
 
-        // Alternar entre Telas de Autenticação
         window.mostrarPainelLogin = function(tipo) {
             document.getElementById('form-entrar').classList.add('hidden');
             document.getElementById('form-cadastro').classList.add('hidden');
@@ -113,10 +111,7 @@
             }
 
             try {
-                // Cria o usuário no Authentication
                 await createUserWithEmailAndPassword(auth, email, senha);
-                
-                // Salva o registro no Firestore para o Admin visualizar os acessos criados
                 await addDoc(collection(db, "usuarios_cadastrados"), {
                     email: email,
                     criado_em: new Date().toLocaleDateString('pt-BR')
@@ -153,9 +148,7 @@
             });
         }
 
-        // --- NAVEGAÇÃO ENTRE ABAS COM BLINDAGEM DE ADMIN ---
         window.abrirAba = function(abaId) {
-            // Validação de segurança rigorosa para a aba admin
             if (abaId === 'admin') {
                 const currentUser = auth.currentUser;
                 const currentEmail = currentUser ? (currentUser.email || "").toLowerCase().trim() : "";
@@ -416,7 +409,7 @@
             } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
-        // --- GESTÃO DE USUÁRIOS (ADMIN) COM LISTAGEM DE ACESSOS CRIADOS ---
+        // --- GESTÃO DE USUÁRIOS (ADMIN) ---
         window.carregarUsuariosAdmin = async function() {
             const container = document.getElementById('listaUsuariosAdmin');
             container.innerHTML = `
@@ -474,12 +467,10 @@
                         </tr>
                     `;
                 });
-            } catch (err) {
-                console.error(err);
-            }
+            } catch (err) { console.error(err); }
         }
 
-        // --- IMPORTADOR UNIVERSAL ---
+        // --- IMPORTADOR UNIVERSAL COM UPSERT INTELIGENTE (EVITA DUPLICATAS E ATUALIZA) ---
         window.processarPlanilha = function(event, modulo) {
             const file = event.target.files[0];
             if (!file) return;
@@ -493,13 +484,24 @@
                 const workbook = XLSX.read(data, {type: 'array'});
                 let salvos = 0;
 
+                // 1. COBRANÇAS
                 if (modulo === 'cobrancas') {
+                    const snapshot = await getDocs(collection(db, "cobrancas"));
+                    const mapCobrancas = new Map();
+                    snapshot.forEach(d => {
+                        const dat = d.data();
+                        const key = `${String(dat.cliente_id || '').trim()}_${dat.dia_vencimento}_${String(dat.marca || '').trim()}`.toUpperCase();
+                        mapCobrancas.set(key, d.id);
+                    });
+
                     for (let nomeAba of ['DIA 5', 'DIA 20']) {
                         if (!workbook.Sheets[nomeAba]) continue;
                         const diaVencimento = nomeAba.includes('5') ? 5 : 20;
                         const json = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba]);
                         for (let linha of json) {
                             if (!linha['CLIENTE']) continue; 
+                            let cliId = String(linha['CLIENTE']).trim();
+                            let marca = String(linha['MARCA'] || '-').trim();
                             let quantParStr = String(linha['QUANT PAR'] || '1/1');
                             let parcelasPagas = 1, totalParcelas = 1;
                             if (quantParStr.includes('/')) {
@@ -509,55 +511,110 @@
                             let valorParcela = parseFloat(String(linha['VALOR PARCELA']).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
                             let valorRecebido = parseFloat(String(linha['TOTAL RECEBIDO']).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
                             let status = valorRecebido >= (parcelasPagas * valorParcela) ? 'pago' : 'pendente';
-                            try {
-                                await addDoc(collection(db, "cobrancas"), {
-                                    cliente_id: String(linha['CLIENTE']), marca: String(linha['MARCA'] || '-'),
-                                    cnpj: String(linha['CNPJ'] || ''), dia_vencimento: diaVencimento,
+                            let cnpj = String(linha['CNPJ'] || '').trim();
+
+                            const key = `${cliId}_${diaVencimento}_${marca}`.toUpperCase();
+
+                            if (mapCobrancas.has(key)) {
+                                const docId = mapCobrancas.get(key);
+                                await updateDoc(doc(db, "cobrancas", docId), {
+                                    cliente_id: cliId, marca: marca, cnpj: cnpj, dia_vencimento: diaVencimento,
                                     valor_total: valorParcela, valor_pago: valorRecebido,
                                     quantidade_parcelas: totalParcelas, parcelas_pagas: parcelasPagas, status_pagamento: status
                                 });
                                 salvos++;
-                            } catch (err) {}
+                            } else {
+                                const docRef = await addDoc(collection(db, "cobrancas"), {
+                                    cliente_id: cliId, marca: marca, cnpj: cnpj, dia_vencimento: diaVencimento,
+                                    valor_total: valorParcela, valor_pago: valorRecebido,
+                                    quantidade_parcelas: totalParcelas, parcelas_pagas: parcelasPagas, status_pagamento: status
+                                });
+                                mapCobrancas.set(key, docRef.id);
+                                salvos++;
+                            }
                         }
                     }
                     carregarCobrancas(cicloAtual);
                 }
 
+                // 2. CLIENTES
                 if (modulo === 'clientes') {
                     const aba = workbook.Sheets['BASE DE MARCAS '] || workbook.Sheets[workbook.SheetNames[0]];
                     if (aba) {
                         const json = XLSX.utils.sheet_to_json(aba);
+                        const snapshot = await getDocs(collection(db, "clientes"));
+                        const mapClientes = new Map();
+                        snapshot.forEach(d => {
+                            const dat = d.data();
+                            const key = (dat.cnpj && dat.cnpj !== '-') ? dat.cnpj.trim() : (String(dat.cliente || '') + '_' + String(dat.marca || '')).trim().toUpperCase();
+                            mapClientes.set(key, d.id);
+                        });
+
                         for (let linha of json) {
                             if (!linha['CLIENTE']) continue;
-                            try {
-                                await addDoc(collection(db, "clientes"), {
-                                    cliente: String(linha['CLIENTE']), marca: String(linha['MARCA'] || '-'),
-                                    cnpj: String(linha['CNPJ'] || '-'), documento: String(linha['DOCUMENTO'] || '-'),
-                                    vendedora: String(linha['VENDEDORA'] || '-')
+                            let cli = String(linha['CLIENTE']).trim();
+                            let marca = String(linha['MARCA'] || '-').trim();
+                            let cnpj = String(linha['CNPJ'] || '-').trim();
+                            let documento = String(linha['DOCUMENTO'] || '-').trim();
+                            let vendedora = String(linha['VENDEDORA'] || '-').trim();
+
+                            const key = (cnpj && cnpj !== '-') ? cnpj : (cli + '_' + marca).toUpperCase();
+
+                            if (mapClientes.has(key)) {
+                                const docId = mapClientes.get(key);
+                                await updateDoc(doc(db, "clientes", docId), {
+                                    cliente: cli, marca: marca, cnpj: cnpj, documento: documento, vendedora: vendedora
                                 });
                                 salvos++;
-                            } catch (err) {}
+                            } else {
+                                const docRef = await addDoc(collection(db, "clientes"), {
+                                    cliente: cli, marca: marca, cnpj: cnpj, documento: documento, vendedora: vendedora
+                                });
+                                mapClientes.set(key, docRef.id);
+                                salvos++;
+                            }
                         }
                     }
                     carregarClientes();
                 }
 
+                // 3. RPI
                 if (modulo === 'rpi') {
+                    const snapshot = await getDocs(collection(db, "rpi_marcas"));
+                    const mapRpi = new Map();
+                    snapshot.forEach(d => {
+                        const dat = d.data();
+                        if (dat.processo) mapRpi.set(String(dat.processo).trim(), d.id);
+                    });
+
                     for (let sheetName of workbook.SheetNames) {
                         const sheet = workbook.Sheets[sheetName];
                         const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
                         let currentPhase = "GERAL";
+                        
                         for (let r = 0; r < rows.length; r++) {
                             let row = rows[r];
                             for (let c = 0; c < row.length; c += 4) {
                                 let valCol0 = row[c] ? String(row[c]).trim() : "";
                                 let valCol1 = row[c+1] ? String(row[c+1]).trim() : "";
-                                if (valCol0 && !/^\d+$/.test(valCol0) && valCol0.length > 3) { currentPhase = valCol0; }
+
+                                if (valCol0 && !/^\d+$/.test(valCol0) && valCol0.length > 3) {
+                                    currentPhase = valCol0;
+                                }
                                 if (valCol0 && /^\d+$/.test(valCol0) && valCol1) {
-                                    try {
-                                        await addDoc(collection(db, "rpi_marcas"), { processo: valCol0, marca: valCol1, fase: currentPhase.toUpperCase() });
+                                    let processo = valCol0;
+                                    let marca = valCol1;
+                                    let fase = currentPhase.toUpperCase();
+
+                                    if (mapRpi.has(processo)) {
+                                        const docId = mapRpi.get(processo);
+                                        await updateDoc(doc(db, "rpi_marcas", docId), { marca: marca, fase: fase });
                                         salvos++;
-                                    } catch (err) {}
+                                    } else {
+                                        const docRef = await addDoc(collection(db, "rpi_marcas"), { processo: processo, marca: marca, fase: fase });
+                                        mapRpi.set(processo, docRef.id);
+                                        salvos++;
+                                    }
                                 }
                             }
                         }
@@ -565,29 +622,59 @@
                     carregarRPI();
                 }
 
+                // 4. GRU
                 if (modulo === 'gru') {
+                    const snapshot = await getDocs(collection(db, "gru"));
+                    const mapGru = new Map();
+                    snapshot.forEach(d => {
+                        const dat = d.data();
+                        const key = `${String(dat.cliente || '').trim()}_${String(dat.marca || '').trim()}_${String(dat.vencimento || '').trim()}`.toUpperCase();
+                        mapGru.set(key, d.id);
+                    });
+
                     const aba = workbook.Sheets[workbook.SheetNames[0]];
                     if (aba) {
                         const json = XLSX.utils.sheet_to_json(aba);
                         for (let linha of json) {
-                            let cli = linha['CLIENTE'] || linha['Cliente'] || '';
+                            let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
                             if (!cli) continue;
+                            let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
+                            let vencimento = String(linha['VENCIMENTO'] || linha['Vencimento'] || '-').trim();
                             let valor = parseFloat(String(linha['VALOR'] || linha['Valor'] || 0).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                            try {
-                                await addDoc(collection(db, "gru"), { cliente: String(cli), marca: String(linha['MARCA'] || '-'), vencimento: String(linha['VENCIMENTO'] || '-'), valor: valor });
+
+                            const key = `${cli}_${marca}_${vencimento}`.toUpperCase();
+
+                            if (mapGru.has(key)) {
+                                const docId = mapGru.get(key);
+                                await updateDoc(doc(db, "gru", docId), { cliente: cli, marca: marca, vencimento: vencimento, valor: valor });
                                 salvos++;
-                            } catch (err) {}
+                            } else {
+                                const docRef = await addDoc(collection(db, "gru"), { cliente: cli, marca: marca, vencimento: vencimento, valor: valor });
+                                mapGru.set(key, docRef.id);
+                                salvos++;
+                            }
                         }
                     }
                     carregarGRU();
                 }
 
+                // 5. MENSAL
                 if (modulo === 'mensal') {
+                    const snapshot = await getDocs(collection(db, "mensal"));
+                    const mapMensal = new Map();
+                    snapshot.forEach(d => {
+                        const dat = d.data();
+                        const key = `${String(dat.cliente || '').trim()}_${String(dat.marca || '').trim()}_${String(dat.data_pagamento || '').trim()}`.toUpperCase();
+                        mapMensal.set(key, d.id);
+                    });
+
                     const aba = workbook.Sheets['BASE ADMINISTRATIVO '] || workbook.Sheets[workbook.SheetNames[0]];
                     if (aba) {
                         const json = XLSX.utils.sheet_to_json(aba);
                         for (let linha of json) {
                             if (!linha['CLIENTE']) continue;
+                            let cli = String(linha['CLIENTE']).trim();
+                            let marca = String(linha['MARCA'] || '-').trim();
                             let valor = parseFloat(String(linha['VALOR']).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
                             let rawData = linha['DATA DE PAGAMENTO'];
                             let formatedDate = rawData;
@@ -595,16 +682,26 @@
                                 let dateObj = new Date((rawData - (25567 + 2))*86400*1000);
                                 formatedDate = dateObj.toLocaleDateString('pt-BR');
                             }
-                            try {
-                                await addDoc(collection(db, "mensal"), { cliente: String(linha['CLIENTE']), marca: String(linha['MARCA'] || '-'), valor: valor, data_pagamento: String(formatedDate || '-'), status: String(linha['STATUS'] || 'PAGO') });
+                            let status = String(linha['STATUS'] || 'PAGO').trim();
+                            let dataPagamentoStr = String(formatedDate || '-').trim();
+
+                            const key = `${cli}_${marca}_${dataPagamentoStr}`.toUpperCase();
+
+                            if (mapMensal.has(key)) {
+                                const docId = mapMensal.get(key);
+                                await updateDoc(doc(db, "mensal", docId), { cliente: cli, marca: marca, valor: valor, data_pagamento: dataPagamentoStr, status: status });
                                 salvos++;
-                            } catch (err) {}
+                            } else {
+                                const docRef = await addDoc(collection(db, "mensal"), { cliente: cli, marca: marca, valor: valor, data_pagamento: dataPagamentoStr, status: status });
+                                mapMensal.set(key, docRef.id);
+                                salvos++;
+                            }
                         }
                     }
                     carregarMensal();
                 }
 
-                alert(`Importação concluída! ${salvos} registros salvos.`);
+                alert(`Processo concluído com sucesso! Registros atualizados/inseridos.`);
                 document.getElementById(btnTextId).innerText = textoOriginal;
             };
             reader.readAsArrayBuffer(file);
@@ -620,7 +717,6 @@
             <h2 class="text-2xl font-black text-[#0B192C] tracking-wide">KRONOS GS</h2>
             <p class="text-slate-400 text-xs uppercase tracking-widest mt-1">ERP Executive Suite</p>
             
-            <!-- FORMULÁRIO DE ENTRADA -->
             <form id="form-entrar" class="mt-6 space-y-4 text-left block" onsubmit="event.preventDefault(); fazerLogin();">
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase">E-mail</label>
@@ -646,7 +742,6 @@
                 </div>
             </form>
 
-            <!-- FORMULÁRIO DE CADASTRO -->
             <form id="form-cadastro" class="mt-6 space-y-4 text-left hidden" onsubmit="event.preventDefault(); fazerCadastro();">
                 <h3 class="text-sm font-bold text-[#0B192C] uppercase border-b pb-2">Novo Cadastro</h3>
                 <div>
@@ -665,7 +760,6 @@
                 </div>
             </form>
 
-            <!-- FORMULÁRIO DE REDEFINIÇÃO DE SENHA -->
             <form id="form-redefinir" class="mt-6 space-y-4 text-left hidden" onsubmit="event.preventDefault(); redefinirSenha();">
                 <h3 class="text-sm font-bold text-[#0B192C] uppercase border-b pb-2">Redefinir Senha</h3>
                 <div>
@@ -713,7 +807,6 @@
                 <button id="btn-mensal" onclick="abrirAba('mensal')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
                     💰 Financeiro / Mensal
                 </button>
-                <!-- BOTÃO ADMIN INICIALMENTE OCULTO (HIDDEN) -->
                 <button id="menu-admin" onclick="abrirAba('admin')" class="btn-menu hidden w-full flex items-center gap-3 px-4 py-3 text-amber-400 hover:bg-[#1E3E62] rounded-lg font-medium transition-all text-left border-l-4 border-amber-400">
                     🔐 Gestão de Usuários (Admin)
                 </button>
