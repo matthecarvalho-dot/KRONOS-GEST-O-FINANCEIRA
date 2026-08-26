@@ -14,7 +14,6 @@
         import { getFirestore, collection, getDocs, query, where, addDoc, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, setPersistence, browserLocalPersistence, browserSessionPersistence, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-        // SUAS CHAVES REAIS DO FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyD6Mv3DiNGWCoC4Rd0iOt6L22qxnS-XAhY",
             authDomain: "kronos-gestao-fincanceira.firebaseapp.com",
@@ -29,13 +28,10 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // E-MAIL EXCLUSIVO DO ADMINISTRADOR
         const EMAIL_ADMIN = "matthecarvalho@gmail.com";
-
         let cicloAtual = 5;
         let rpiCache = [];
 
-        // --- CONTROLE DE AUTENTICAÇÃO E SEGURANÇA COM VERIFICAÇÃO DE BLOQUEIO ---
         onAuthStateChanged(auth, async (user) => {
             const telaLogin = document.getElementById('tela-login');
             const appContainer = document.getElementById('app-container');
@@ -66,12 +62,12 @@
                 
                 if (userEmail === EMAIL_ADMIN) {
                     menuAdmin.classList.remove('hidden');
-                    badgeRole.innerText = "⭐ Perfil: ADMINISTRADOR";
-                    badgeRole.className = "text-xs font-bold text-[#D4AF37] mt-1";
+                    badgeRole.innerText = "⭐ ADMINISTRADOR";
+                    badgeRole.className = "text-xs font-bold text-[#D4AF37] mt-1 tracking-wider";
                 } else {
                     menuAdmin.classList.add('hidden');
-                    badgeRole.innerText = "👤 Perfil: USUÁRIO";
-                    badgeRole.className = "text-xs font-bold text-emerald-400 mt-1";
+                    badgeRole.innerText = "👤 USUÁRIO";
+                    badgeRole.className = "text-xs font-bold text-slate-300 mt-1 tracking-wider";
                 }
 
                 abrirAba('cobrancas');
@@ -179,13 +175,13 @@
 
             document.querySelectorAll('.aba-conteudo').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.btn-menu').forEach(el => {
-                el.className = 'btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent';
+                el.className = 'btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#162942] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent';
             });
 
             document.getElementById('aba-' + abaId).classList.remove('hidden');
             let btnAtivo = document.getElementById('btn-' + abaId);
             if (btnAtivo) {
-                btnAtivo.className = 'btn-menu w-full flex items-center gap-3 px-4 py-3 bg-[#1E3E62] text-[#D4AF37] rounded-lg font-semibold transition-all text-left border-l-4 border-[#D4AF37] shadow-md';
+                btnAtivo.className = 'btn-menu w-full flex items-center gap-3 px-4 py-3 bg-[#162942] text-[#D4AF37] rounded-xl font-semibold transition-all text-left border-l-4 border-[#D4AF37] shadow-md';
             }
             
             if(abaId === 'cobrancas') carregarCobrancas(cicloAtual);
@@ -196,12 +192,12 @@
             if(abaId === 'admin') carregarUsuariosAdmin();
         }
 
-        // --- 1. MÓDULO COBRANÇAS ---
+        // --- MÓDULO COBRANÇAS ---
         let cacheCobrancas = [];
         window.carregarCobrancas = async function(dia) {
             cicloAtual = dia;
-            document.getElementById('btnDia5').className = dia === 5 ? 'px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow' : 'px-4 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-semibold hover:bg-slate-50';
-            document.getElementById('btnDia20').className = dia === 20 ? 'px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow' : 'px-4 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-semibold hover:bg-slate-50';
+            document.getElementById('btnDia5').className = dia === 5 ? 'px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-lg font-semibold shadow-sm' : 'px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg font-semibold hover:bg-slate-50';
+            document.getElementById('btnDia20').className = dia === 20 ? 'px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-lg font-semibold shadow-sm' : 'px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg font-semibold hover:bg-slate-50';
             
             const tabela = document.getElementById('tabelaCobrancas');
             tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-slate-400">Consultando banco de dados...</td></tr>`;
@@ -228,7 +224,7 @@
 
                 renderizarTabelaCobrancas(cacheCobrancas);
                 atualizarCards(totalGeral, totalPago, count);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-500">Erro ao carregar.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-rose-500">Erro ao carregar.</td></tr>`; }
         }
 
         window.renderizarTabelaCobrancas = function(dados) {
@@ -240,12 +236,12 @@
             }
             dados.forEach(data => {
                 const badge = data.status_pagamento === 'pago' 
-                    ? '<span class="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded">PAGO</span>' 
-                    : '<span class="px-2 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded">PENDENTE</span>';
+                    ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-md">PAGO</span>' 
+                    : '<span class="px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded-md">PENDENTE</span>';
                 
                 tabela.innerHTML += `
-                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                        <td class="px-6 py-4 text-sm text-slate-800 font-bold">${String(data.cliente_id || '').substring(0, 20)}</td>
+                    <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
+                        <td class="px-6 py-4 text-sm text-slate-800 font-bold">${String(data.cliente_id || '').substring(0, 25)}</td>
                         <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-500">Dia ${data.dia_vencimento}</td>
                         <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor_total || 0).toFixed(2)}</td>
@@ -253,7 +249,8 @@
                         <td class="px-6 py-4 text-sm text-slate-600 text-center font-medium">${data.parcelas_pagas || 0} / ${data.quantidade_parcelas || 1}</td>
                         <td class="px-6 py-4 text-sm flex items-center gap-3">
                             ${badge}
-                            <button onclick="editarParcelas('${data.id}', ${data.parcelas_pagas || 0}, ${data.quantidade_parcelas || 1}, ${data.valor_total || 0})" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded border border-slate-300 transition-colors">Atualizar</button>
+                            <button onclick="editarParcelas('${data.id}', ${data.parcelas_pagas || 0}, ${data.quantidade_parcelas || 1}, ${data.valor_total || 0})" class="px-3 py-1 bg-slate-100 hover:bg-[#0B192C] hover:text-[#D4AF37] text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all">Atualizar</button>
+                            <button onclick="excluirRegistroCobranca('${data.id}')" class="px-2 py-1 text-rose-500 hover:text-rose-700 text-xs font-bold">✕</button>
                         </td>
                     </tr>
                 `;
@@ -267,6 +264,53 @@
                 String(item.marca || '').toLowerCase().includes(termo)
             );
             renderizarTabelaCobrancas(filtrados);
+        }
+
+        window.abrirModalCobranca = function() {
+            document.getElementById('modalCobranca').classList.remove('hidden');
+        }
+        window.fecharModalCobranca = function() {
+            document.getElementById('modalCobranca').classList.add('hidden');
+        }
+
+        window.salvarCobrancaManual = async function(event) {
+            event.preventDefault();
+            const cliente = document.getElementById('cobCliente').value.trim();
+            const marca = document.getElementById('cobMarca').value.trim();
+            const cnpj = document.getElementById('cobCnpj').value.trim();
+            const dia = parseInt(document.getElementById('cobDia').value);
+            const valor = parseFloat(document.getElementById('cobValor').value) || 0;
+            const parcelas = parseInt(document.getElementById('cobParcelas').value) || 1;
+            const pagas = parseInt(document.getElementById('cobPagas').value) || 0;
+
+            const valorPago = pagas * valor;
+            const status = pagas >= parcelas ? 'pago' : 'pendente';
+
+            try {
+                await addDoc(collection(db, "cobrancas"), {
+                    cliente_id: cliente,
+                    marca: marca,
+                    cnpj: cnpj,
+                    dia_vencimento: dia,
+                    valor_total: valor,
+                    quantidade_parcelas: parcelas,
+                    parcelas_pagas: pagas,
+                    valor_pago: valorPago,
+                    status_pagamento: status
+                });
+                alert("Cobrança cadastrada com sucesso!");
+                fecharModalCobranca();
+                document.getElementById('formCobrancaManual').reset();
+                carregarCobrancas(cicloAtual);
+            } catch (e) { alert("Erro ao salvar cobrança."); }
+        }
+
+        window.excluirRegistroCobranca = async function(docId) {
+            if (!confirm("Deseja realmente excluir esta cobrança?")) return;
+            try {
+                await deleteDoc(doc(db, "cobrancas", docId));
+                carregarCobrancas(cicloAtual);
+            } catch (e) { alert("Erro ao excluir."); }
         }
 
         window.gerarRelatorioCobrancas = function() {
@@ -295,7 +339,6 @@
             try {
                 const docRef = doc(db, "cobrancas", docId);
                 await updateDoc(docRef, { parcelas_pagas: novasPagas, valor_pago: novoValorPago, status_pagamento: novoStatus });
-                alert("Parcelas atualizadas com sucesso!");
                 carregarCobrancas(cicloAtual);
             } catch (err) { alert("Erro ao atualizar no Firebase."); }
         }
@@ -310,22 +353,22 @@
         let cacheClientes = [];
         window.carregarClientes = async function() {
             const tabela = document.getElementById('tabelaClientes');
-            tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Carregando clientes...</td></tr>`;
+            tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-slate-400">Carregando clientes...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "clientes"));
                 cacheClientes = [];
                 let totalCli = 0, assinadoCount = 0, pendenteCount = 0;
 
                 if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum cliente cadastrado. Importe a planilha.</td></tr>`;
+                    tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-slate-400">Nenhum cliente cadastrado. Adicione manualmente ou importe.</td></tr>`;
                     atualizarDashboardClientes(0, 0, 0);
                     return;
                 }
 
-                querySnapshot.forEach((doc) => {
+                querySnapshot.forEach((docSnap) => {
                     totalCli++;
-                    const data = doc.data();
-                    cacheClientes.push(data);
+                    const data = docSnap.data();
+                    cacheClientes.push({ id: docSnap.id, ...data });
                     let docStatus = String(data.documento || '').toUpperCase();
                     if (docStatus.includes('ASSINADO')) assinadoCount++;
                     else pendenteCount++;
@@ -333,32 +376,88 @@
 
                 renderizarTabelaClientes(cacheClientes);
                 atualizarDashboardClientes(totalCli, assinadoCount, pendenteCount);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-rose-500">Erro ao carregar.</td></tr>`; }
         }
 
         window.renderizarTabelaClientes = function(dados) {
             const tabela = document.getElementById('tabelaClientes');
             tabela.innerHTML = '';
             if (dados.length === 0) {
-                tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum cliente encontrado.</td></tr>`;
+                tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-slate-400">Nenhum cliente encontrado.</td></tr>`;
                 return;
             }
             dados.forEach(data => {
                 let docStatus = String(data.documento || '').toUpperCase();
                 let badgeDoc = docStatus.includes('ASSINADO') 
-                    ? '<span class="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded">ASSINADO</span>'
-                    : '<span class="px-2 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded">PENDENTE</span>';
+                    ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-md">ASSINADO</span>'
+                    : '<span class="px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded-md">PENDENTE</span>';
 
                 tabela.innerHTML += `
-                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                    <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
                         <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-600 font-medium">${data.marca || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-500">${data.cnpj || ''}</td>
                         <td class="px-6 py-4 text-sm">${badgeDoc}</td>
-                        <td class="px-6 py-4 text-sm text-blue-600 font-semibold">${data.vendedora || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-600 font-semibold">${data.vendedora || ''}</td>
+                        <td class="px-6 py-4 text-sm text-right space-x-2">
+                            <button onclick="abrirModalEditarCliente('${data.id}', \`${data.cliente || ''}\`, \`${data.marca || ''}\`, \`${data.cnpj || ''}\`, \`${data.documento || ''}\`, \`${data.vendedora || ''}\`)" class="px-3 py-1 bg-slate-100 hover:bg-[#0B192C] hover:text-[#D4AF37] text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all">Editar</button>
+                            <button onclick="excluirCliente('${data.id}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg transition-all">Excluir</button>
+                        </td>
                     </tr>
                 `;
             });
+        }
+
+        window.abrirModalCliente = function() {
+            document.getElementById('formClienteModal').reset();
+            document.getElementById('cliDocId').value = '';
+            document.getElementById('modalClienteTitulo').innerText = 'Novo Cliente';
+            document.getElementById('modalCliente').classList.remove('hidden');
+        }
+
+        window.abrirModalEditarCliente = function(id, cliente, marca, cnpj, documento, vendedora) {
+            document.getElementById('cliDocId').value = id;
+            document.getElementById('cliNome').value = cliente;
+            document.getElementById('cliMarca').value = marca;
+            document.getElementById('cliCnpj').value = cnpj;
+            document.getElementById('cliStatusDoc').value = documento;
+            document.getElementById('cliVendedora').value = vendedora;
+            document.getElementById('modalClienteTitulo').innerText = 'Editar Cliente';
+            document.getElementById('modalCliente').classList.remove('hidden');
+        }
+
+        window.fecharModalCliente = function() {
+            document.getElementById('modalCliente').classList.add('hidden');
+        }
+
+        window.salvarClienteManual = async function(event) {
+            event.preventDefault();
+            const docId = document.getElementById('cliDocId').value;
+            const cliente = document.getElementById('cliNome').value.trim();
+            const marca = document.getElementById('cliMarca').value.trim();
+            const cnpj = document.getElementById('cliCnpj').value.trim();
+            const documento = document.getElementById('cliStatusDoc').value.trim();
+            const vendedora = document.getElementById('cliVendedora').value.trim();
+
+            try {
+                if (docId) {
+                    await updateDoc(doc(db, "clientes", docId), { cliente, marca, cnpj, documento, vendedora });
+                    alert("Cliente atualizado com sucesso!");
+                } else {
+                    await addDoc(collection(db, "clientes"), { cliente, marca, cnpj, documento, vendedora });
+                    alert("Cliente cadastrado com sucesso!");
+                }
+                fecharModalCliente();
+                carregarClientes();
+            } catch (e) { alert("Erro ao salvar cliente."); }
+        }
+
+        window.excluirCliente = async function(docId) {
+            if (!confirm("Tem certeza que deseja excluir este cliente?")) return;
+            try {
+                await deleteDoc(doc(db, "clientes", docId));
+                carregarClientes();
+            } catch (e) { alert("Erro ao excluir cliente."); }
         }
 
         window.filtrarClientes = function() {
@@ -411,14 +510,14 @@
                 });
                 renderizarFiltrosRPI(contFases);
                 filtrarRPI('TODOS');
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-rose-500">Erro.</td></tr>`; }
         }
 
         window.renderizarFiltrosRPI = function(contFases) {
             const container = document.getElementById('dashRpiContainer');
             container.innerHTML = `
-                <button onclick="filtrarRPI('TODOS')" class="p-4 bg-[#0B192C] text-[#D4AF37] rounded-xl shadow border border-[#D4AF37] text-left font-bold hover:bg-[#1E3E62] transition-all">
-                    <p class="text-xs uppercase tracking-widest text-slate-300">TODOS OS PROCESSOS</p>
+                <button onclick="filtrarRPI('TODOS')" class="p-4 bg-[#0B192C] text-[#D4AF37] rounded-xl shadow-sm border border-[#1E3E62] text-left font-bold hover:bg-[#162942] transition-all">
+                    <p class="text-[10px] uppercase tracking-widest text-slate-300">TODOS OS PROCESSOS</p>
                     <p class="text-2xl mt-1">${rpiCache.length}</p>
                 </button>
             `;
@@ -428,8 +527,8 @@
                 Object.keys(contFases).forEach(f => { if (f.includes(faseNome)) qtd += contFases[f]; });
                 container.innerHTML += `
                     <button onclick="filtrarRPI('${faseNome}')" class="p-4 bg-white text-slate-800 rounded-xl shadow-sm border border-slate-200 text-left font-semibold hover:border-[#D4AF37] transition-all">
-                        <p class="text-xs uppercase tracking-widest text-slate-400 truncate">${faseNome}</p>
-                        <p class="text-2xl font-black text-slate-800 mt-1">${qtd}</p>
+                        <p class="text-[10px] uppercase tracking-widest text-slate-400 truncate">${faseNome}</p>
+                        <p class="text-2xl font-black text-[#0B192C] mt-1">${qtd}</p>
                     </button>
                 `;
             });
@@ -454,10 +553,10 @@
             }
             filtrados.forEach(data => {
                 tabela.innerHTML += `
-                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                    <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
                         <td class="px-6 py-4 text-sm font-mono text-slate-600 font-semibold">${data.processo || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.marca || ''}</td>
-                        <td class="px-6 py-4 text-sm"><span class="px-2.5 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded-full">${data.fase}</span></td>
+                        <td class="px-6 py-4 text-sm"><span class="px-2.5 py-1 text-xs font-bold bg-blue-50 text-blue-800 rounded-full border border-blue-100">${data.fase}</span></td>
                     </tr>
                 `;
             });
@@ -475,7 +574,7 @@
             janela.document.close();
         }
 
-        // --- MÓDULO GRU (ATUALIZADO) ---
+        // --- MÓDULO GRU ---
         let cacheGRU = [];
         window.carregarGRU = async function() {
             const tabela = document.getElementById('tabelaGRU');
@@ -490,7 +589,7 @@
                     cacheGRU.push({ id: docSnap.id, ...data });
                 });
                 renderizarTabelaGRU(cacheGRU);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-rose-500">Erro.</td></tr>`; }
         }
 
         window.renderizarTabelaGRU = function(dados) {
@@ -502,22 +601,22 @@
             }
             dados.forEach(data => {
                 const badgeStatus = data.status_pagamento === 'pago' 
-                    ? '<span class="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded">PAGO</span>' 
-                    : '<span class="px-2 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded">PENDENTE</span>';
+                    ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-md">PAGO</span>' 
+                    : '<span class="px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded-md">PENDENTE</span>';
 
                 tabela.innerHTML += `
-                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                    <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
                         <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-500">${data.vencimento || ''}</td>
                         <td class="px-6 py-4 text-sm flex items-center gap-2">
                             ${badgeStatus}
-                            <button onclick="alternarStatusGRU('${data.id}', '${data.status_pagamento || 'pendente'}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded border border-slate-300">Alterar</button>
+                            <button onclick="alternarStatusGRU('${data.id}', '${data.status_pagamento || 'pendente'}')" class="px-2.5 py-1 bg-slate-100 hover:bg-[#0B192C] hover:text-[#D4AF37] text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all">Alterar</button>
                         </td>
                         <td class="px-6 py-4 text-sm text-slate-600">
                             <div class="flex items-center gap-2">
                                 <span class="truncate max-w-xs text-xs text-slate-600">${data.anotacoes || 'Sem anotações'}</span>
-                                <button onclick="editarAnotacaoGRU('${data.id}', \`${data.anotacoes || ''}\`)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded border border-slate-300">Editar</button>
+                                <button onclick="editarAnotacaoGRU('${data.id}', \`${data.anotacoes || ''}\`)" class="px-2.5 py-1 bg-slate-100 hover:bg-[#0B192C] hover:text-[#D4AF37] text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all">Editar</button>
                             </div>
                         </td>
                     </tr>
@@ -579,7 +678,7 @@
                     cacheMensal.push(data);
                 });
                 renderizarTabelaMensal(cacheMensal);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-rose-500">Erro.</td></tr>`; }
         }
 
         window.renderizarTabelaMensal = function(dados) {
@@ -591,7 +690,7 @@
             }
             dados.forEach(data => {
                 tabela.innerHTML += `
-                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                    <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
                         <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-500">${data.data_pagamento || ''}</td>
@@ -627,24 +726,24 @@
         window.carregarUsuariosAdmin = async function() {
             const container = document.getElementById('listaUsuariosAdmin');
             container.innerHTML = `
-                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
+                <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm mb-6">
                     <h3 class="text-lg font-bold text-[#0B192C]">Painel de Controle do Administrador</h3>
                     <p class="text-slate-500 mt-1 text-sm">Gerencie quem tem permissão para acessar o sistema ou altere nomes e perfis.</p>
                 </div>
 
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div class="p-6 border-b border-slate-200">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                    <div class="p-6 border-b border-slate-100">
                         <h4 class="font-bold text-[#0B192C]">Controle de Acessos</h4>
-                        <p class="text-xs text-slate-500 mt-0.5">Lista completa de contas cadastradas.</p>
+                        <p class="text-xs text-slate-400 mt-0.5">Lista completa de contas cadastradas.</p>
                     </div>
-                    <table class="min-w-full divide-y divide-slate-200">
-                        <thead class="bg-slate-50">
+                    <table class="min-w-full divide-y divide-slate-100">
+                        <thead class="bg-slate-50/70">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Nome / Identificação</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">E-mail</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Data</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Status</th>
-                                <th class="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase">Ações</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Nome / Identificação</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">E-mail</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Ações</th>
                             </tr>
                         </thead>
                         <tbody id="tabelaUsuariosCadastrados" class="bg-white divide-y divide-slate-100">
@@ -669,19 +768,19 @@
                     const docId = docSnap.id;
                     const status = data.status || 'ativo';
                     const badgeStatus = status === 'ativo' 
-                        ? '<span class="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded">ATIVO</span>' 
-                        : '<span class="px-2 py-1 text-xs font-bold bg-rose-100 text-rose-800 rounded">BLOQUEADO</span>';
+                        ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-md">ATIVO</span>' 
+                        : '<span class="px-2.5 py-1 text-xs font-bold bg-rose-100 text-rose-800 rounded-md">BLOQUEADO</span>';
 
                     tbody.innerHTML += `
-                        <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                        <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
                             <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.nome || '-'}</td>
                             <td class="px-6 py-4 text-sm text-slate-600">${data.email || ''}</td>
                             <td class="px-6 py-4 text-sm text-slate-500">${data.criado_em || '-'}</td>
                             <td class="px-6 py-4 text-sm">${badgeStatus}</td>
                             <td class="px-6 py-4 text-sm text-right space-x-2">
-                                <button onclick="editarNomeUsuario('${docId}', '${data.nome || ''}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded border">Editar Nome</button>
-                                <button onclick="alternarStatusUsuario('${docId}', '${status}')" class="px-2.5 py-1 ${status === 'ativo' ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'} text-xs font-semibold rounded">${status === 'ativo' ? 'Bloquear' : 'Ativar'}</button>
-                                <button onclick="excluirUsuarioAdmin('${docId}')" class="px-2.5 py-1 bg-rose-100 text-rose-700 hover:bg-rose-200 text-xs font-semibold rounded">Excluir</button>
+                                <button onclick="editarNomeUsuario('${docId}', '${data.nome || ''}')" class="px-3 py-1 bg-slate-100 hover:bg-[#0B192C] hover:text-[#D4AF37] text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all">Editar Nome</button>
+                                <button onclick="alternarStatusUsuario('${docId}', '${status}')" class="px-3 py-1 ${status === 'ativo' ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'} text-xs font-semibold rounded-lg transition-all">${status === 'ativo' ? 'Bloquear' : 'Ativar'}</button>
+                                <button onclick="excluirUsuarioAdmin('${docId}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg transition-all">Excluir</button>
                             </td>
                         </tr>
                     `;
@@ -717,7 +816,7 @@
             } catch (e) { alert("Erro ao excluir."); }
         }
 
-        // --- IMPORTADOR UNIVERSAL COM UPSERT INTELIGENTE ---
+        // --- IMPORTADOR UNIVERSAL ---
         window.processarPlanilha = function(event, modulo) {
             const file = event.target.files[0];
             if (!file) return;
@@ -955,23 +1054,25 @@
         }
     </script>
 </head>
-<body class="bg-slate-100 min-h-screen flex font-sans">
+<body class="bg-[#f8fafc] min-h-screen flex font-sans text-slate-800">
 
     <!-- TELA DE LOGIN / CADASTRO / REDEFINIÇÃO -->
     <div id="tela-login" class="fixed inset-0 bg-[#0B192C] z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-200 text-center relative">
-            <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-16 h-16 rounded-xl object-cover shadow-md border-2 border-[#D4AF37] mx-auto mb-4">
-            <h2 class="text-2xl font-black text-[#0B192C] tracking-wide">KRONOS GS</h2>
-            <p class="text-slate-400 text-xs uppercase tracking-widest mt-1">ERP Executive Suite</p>
+        <div class="bg-white rounded-3xl shadow-2xl p-10 max-w-md w-full border border-slate-100 text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#0B192C] via-[#D4AF37] to-[#0B192C]"></div>
             
-            <form id="form-entrar" class="mt-6 space-y-4 text-left block" onsubmit="event.preventDefault(); fazerLogin();">
+            <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-18 h-18 w-20 h-20 rounded-2xl object-cover shadow-lg border-2 border-[#D4AF37] mx-auto mb-4">
+            <h2 class="text-2xl font-black text-[#0B192C] tracking-tight">KRONOS GS</h2>
+            <p class="text-[#D4AF37] text-[10px] uppercase tracking-[0.3em] font-extrabold mt-1">ERP Executive Suite</p>
+            
+            <form id="form-entrar" class="mt-8 space-y-4 text-left block" onsubmit="event.preventDefault(); fazerLogin();">
                 <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase">E-mail</label>
-                    <input type="email" id="loginEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="seu-email@empresa.com" required>
+                    <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider">E-mail</label>
+                    <input type="email" id="loginEmail" class="w-full mt-1.5 px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:outline-none focus:border-[#0B192C] focus:bg-white text-sm transition-all shadow-sm" placeholder="seu-email@empresa.com" required>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase">Senha</label>
-                    <input type="password" id="loginSenha" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="••••••••" required>
+                    <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider">Senha</label>
+                    <input type="password" id="loginSenha" class="w-full mt-1.5 px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:outline-none focus:border-[#0B192C] focus:bg-white text-sm transition-all shadow-sm" placeholder="••••••••" required>
                 </div>
                 
                 <div class="flex items-center gap-2 pt-1">
@@ -979,44 +1080,44 @@
                     <label for="lembrarAutorizado" class="text-xs text-slate-600 font-medium cursor-pointer">Autorizar gravação do login neste dispositivo</label>
                 </div>
 
-                <button type="submit" class="w-full py-3.5 bg-[#0B192C] hover:bg-[#1E3E62] text-[#D4AF37] font-bold rounded-lg shadow-md transition-all tracking-wider text-sm border border-[#D4AF37]">
+                <button type="submit" class="w-full py-4 bg-[#0B192C] hover:bg-[#162942] text-[#D4AF37] font-extrabold rounded-xl shadow-lg transition-all tracking-wider text-sm border border-[#D4AF37]/50 mt-2">
                     ACESSAR SISTEMA
                 </button>
                 
-                <div class="flex justify-between items-center text-xs pt-2">
-                    <button type="button" onclick="mostrarPainelLogin('cadastro')" class="text-blue-600 hover:underline font-semibold">Criar Cadastro</button>
-                    <button type="button" onclick="mostrarPainelLogin('redefinir')" class="text-slate-500 hover:underline">Esqueci a senha</button>
+                <div class="flex justify-between items-center text-xs pt-3 border-t border-slate-100">
+                    <button type="button" onclick="mostrarPainelLogin('cadastro')" class="text-blue-600 hover:text-blue-800 font-bold transition-colors">Criar Cadastro</button>
+                    <button type="button" onclick="mostrarPainelLogin('redefinir')" class="text-slate-500 hover:text-slate-700 transition-colors">Esqueci a senha</button>
                 </div>
             </form>
 
-            <form id="form-cadastro" class="mt-6 space-y-4 text-left hidden" onsubmit="event.preventDefault(); fazerCadastro();">
+            <form id="form-cadastro" class="mt-8 space-y-4 text-left hidden" onsubmit="event.preventDefault(); fazerCadastro();">
                 <h3 class="text-sm font-bold text-[#0B192C] uppercase border-b pb-2">Novo Cadastro</h3>
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase">E-mail</label>
-                    <input type="email" id="cadEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="novo@empresa.com" required>
+                    <input type="email" id="cadEmail" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" placeholder="novo@empresa.com" required>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase">Senha</label>
-                    <input type="password" id="cadSenha" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="••••••••" required>
+                    <input type="password" id="cadSenha" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" placeholder="••••••••" required>
                 </div>
-                <button type="submit" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-md transition-all tracking-wider text-sm">
+                <button type="submit" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-all text-sm">
                     CADASTRAR CONTA
                 </button>
-                <div class="text-center pt-2">
+                <div class="text-center pt-3 border-t border-slate-100">
                     <button type="button" onclick="mostrarPainelLogin('entrar')" class="text-xs text-slate-600 hover:underline font-semibold">← Voltar para o Login</button>
                 </div>
             </form>
 
-            <form id="form-redefinir" class="mt-6 space-y-4 text-left hidden" onsubmit="event.preventDefault(); redefinirSenha();">
+            <form id="form-redefinir" class="mt-8 space-y-4 text-left hidden" onsubmit="event.preventDefault(); redefinirSenha();">
                 <h3 class="text-sm font-bold text-[#0B192C] uppercase border-b pb-2">Redefinir Senha</h3>
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase">E-mail cadastrado</label>
-                    <input type="email" id="redEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="seu-email@empresa.com" required>
+                    <input type="email" id="redEmail" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" placeholder="seu-email@empresa.com" required>
                 </div>
-                <button type="submit" class="w-full py-3.5 bg-[#0B192C] hover:bg-[#1E3E62] text-[#D4AF37] font-bold rounded-lg shadow-md transition-all tracking-wider text-sm border border-[#D4AF37]">
+                <button type="submit" class="w-full py-3.5 bg-[#0B192C] hover:bg-[#162942] text-[#D4AF37] font-bold rounded-xl shadow-md transition-all text-sm border border-[#D4AF37]">
                     ENVIAR INSTRUÇÕES
                 </button>
-                <div class="text-center pt-2">
+                <div class="text-center pt-3 border-t border-slate-100">
                     <button type="button" onclick="mostrarPainelLogin('entrar')" class="text-xs text-slate-600 hover:underline font-semibold">← Voltar para o Login</button>
                 </div>
             </form>
@@ -1028,51 +1129,137 @@
 
     <!-- APLICAÇÃO PRINCIPAL -->
     <div id="app-container" class="hidden flex w-full">
-        <!-- MENU LATERAL EXECUTIVO -->
-        <aside class="w-72 bg-[#0B192C] text-white min-h-screen flex flex-col fixed shadow-2xl z-10 border-r border-[#1E3E62]">
-            <div class="p-6 border-b border-[#1E3E62] flex items-center gap-3">
-                <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-12 h-12 rounded-lg object-cover shadow-md border border-[#D4AF37]">
+        <!-- MENU LATERAL EXECUTIVO (AZUL E DOURADO) -->
+        <aside class="w-72 bg-[#0B192C] text-white min-h-screen flex flex-col fixed shadow-2xl z-10 border-r border-[#162942]">
+            <div class="p-6 border-b border-[#162942] flex items-center gap-3 bg-[#08121f]">
+                <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-12 h-12 rounded-xl object-cover shadow-md border-2 border-[#D4AF37]">
                 <div>
-                    <h1 class="text-xl font-black tracking-widest text-white">KRONOS GS</h1>
-                    <p class="text-[9px] text-[#D4AF37] uppercase tracking-[0.2em] font-bold">ERP Executive</p>
+                    <h1 class="text-lg font-black tracking-widest text-white">KRONOS GS</h1>
+                    <p class="text-[9px] text-[#D4AF37] uppercase tracking-[0.25em] font-extrabold">ERP Executive</p>
                 </div>
             </div>
             
             <nav class="flex-1 px-4 py-6 space-y-2">
-                <button id="btn-cobrancas" onclick="abrirAba('cobrancas')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
+                <button id="btn-cobrancas" onclick="abrirAba('cobrancas')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#162942] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
                     📊 Faturamento (5 e 20)
                 </button>
-                <button id="btn-clientes" onclick="abrirAba('clientes')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
+                <button id="btn-clientes" onclick="abrirAba('clientes')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#162942] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
                     👥 Base de Clientes
                 </button>
-                <button id="btn-rpi" onclick="abrirAba('rpi')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
+                <button id="btn-rpi" onclick="abrirAba('rpi')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#162942] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
                     📖 Revistas RPI (INPI)
                 </button>
-                <button id="btn-gru" onclick="abrirAba('gru')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
+                <button id="btn-gru" onclick="abrirAba('gru')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#162942] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
                     📑 Planilha da GRU
                 </button>
-                <button id="btn-mensal" onclick="abrirAba('mensal')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#1E3E62] hover:text-white rounded-lg font-medium transition-all text-left border-l-4 border-transparent">
+                <button id="btn-mensal" onclick="abrirAba('mensal')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#162942] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
                     💰 Financeiro / Mensal
                 </button>
-                <button id="menu-admin" onclick="abrirAba('admin')" class="btn-menu hidden w-full flex items-center gap-3 px-4 py-3 text-amber-400 hover:bg-[#1E3E62] rounded-lg font-medium transition-all text-left border-l-4 border-amber-400">
+                <button id="menu-admin" onclick="abrirAba('admin')" class="btn-menu hidden w-full flex items-center gap-3 px-4 py-3 text-amber-400 hover:bg-[#162942] rounded-xl font-medium transition-all text-left border-l-4 border-amber-400">
                     🔐 Gestão de Usuários (Admin)
                 </button>
             </nav>
 
-            <div class="p-6 space-y-3">
-                <div class="bg-[#1E3E62] rounded-lg p-4 text-center border border-[#2b527d]">
-                    <p class="text-xs text-slate-300">Sistema Conectado</p>
+            <div class="p-6 space-y-3 bg-[#08121f] border-t border-[#162942]">
+                <div class="bg-[#112238] rounded-xl p-3.5 text-center border border-[#1e3859]">
+                    <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Sistema Conectado</p>
                     <p id="badge-role" class="text-xs font-bold mt-1"></p>
                 </div>
 
-                <button onclick="fazerLogout()" class="w-full py-2.5 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white text-xs font-bold rounded-lg border border-rose-500/30 transition-all">
+                <button onclick="fazerLogout()" class="w-full py-3 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white text-xs font-bold rounded-xl border border-rose-500/30 transition-all shadow-sm">
                     Sair do Sistema (Logout)
                 </button>
             </div>
         </aside>
 
         <!-- CONTEÚDO PRINCIPAL -->
-        <main class="ml-72 flex-1 p-10 w-full bg-slate-100 min-h-screen">
+        <main class="ml-72 flex-1 p-10 w-full bg-[#f8fafc] min-h-screen">
+
+            <!-- MODAL CLIENTE (NOVO / EDITAR) -->
+            <div id="modalCliente" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+                <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 border border-slate-100 relative">
+                    <h3 id="modalClienteTitulo" class="text-xl font-black text-[#0B192C] mb-6">Novo Cliente</h3>
+                    <form onsubmit="salvarClienteManual(event)" class="space-y-4">
+                        <input type="hidden" id="cliDocId">
+                        <div>
+                            <label class="block text-xs font-extrabold text-slate-500 uppercase">Nome do Cliente</label>
+                            <input type="text" id="cliNome" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Marca</label>
+                                <input type="text" id="cliMarca" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-extrabold text-slate-500 uppercase">CNPJ</label>
+                                <input type="text" id="cliCnpj" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Status do Documento</label>
+                                <input type="text" id="cliStatusDoc" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" placeholder="EX: ASSINADO ou PENDENTE">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Vendedora</label>
+                                <input type="text" id="cliVendedora" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
+                            </div>
+                        </div>
+                        <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                            <button type="button" onclick="fecharModalCliente()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">Cancelar</button>
+                            <button type="submit" class="px-6 py-2.5 bg-[#0B192C] hover:bg-[#162942] text-[#D4AF37] text-xs font-extrabold rounded-xl shadow-md transition-all">Salvar Cliente</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- MODAL COBRANÇA (NOVA MANUAL) -->
+            <div id="modalCobranca" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+                <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 border border-slate-100 relative">
+                    <h3 class="text-xl font-black text-[#0B192C] mb-6">Nova Cobrança / Faturamento</h3>
+                    <form onsubmit="salvarCobrancaManual(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-extrabold text-slate-500 uppercase">Cliente</label>
+                            <input type="text" id="cobCliente" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Marca</label>
+                                <input type="text" id="cobMarca" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-extrabold text-slate-500 uppercase">CNPJ</label>
+                                <input type="text" id="cobCnpj" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Ciclo (Dia)</label>
+                                <select id="cobDia" class="w-full mt-1 px-3 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
+                                    <option value="5">Dia 5</option>
+                                    <option value="20">Dia 20</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Valor Parcela (R$)</label>
+                                <input type="number" step="0.01" id="cobValor" class="w-full mt-1 px-3 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Total Parcelas</label>
+                                <input type="number" id="cobParcelas" value="1" class="w-full mt-1 px-3 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-extrabold text-slate-500 uppercase">Parcelas Já Pagas</label>
+                            <input type="number" id="cobPagas" value="0" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
+                        </div>
+                        <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                            <button type="button" onclick="fecharModalCobranca()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">Cancelar</button>
+                            <button type="submit" class="px-6 py-2.5 bg-[#0B192C] hover:bg-[#162942] text-[#D4AF37] text-xs font-extrabold rounded-xl shadow-md transition-all">Salvar Cobrança</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
 
             <!-- ABA 1: COBRANÇAS -->
             <div id="aba-cobrancas" class="aba-conteudo block">
@@ -1084,46 +1271,47 @@
                 </div>
                 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Previsto (Ciclo)</p>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Previsto (Ciclo)</p>
                         <p id="totalPrevisto" class="text-4xl font-black text-[#0B192C] mt-2">R$ 0,00</p>
                     </div>
-                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Arrecadado</p>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Arrecadado</p>
                         <p id="totalArrecadado" class="text-4xl font-black text-emerald-600 mt-2">R$ 0,00</p>
                     </div>
-                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Registros Ativos</p>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Registros Ativos</p>
                         <p id="totalClientes" class="text-4xl font-black text-blue-600 mt-2">0</p>
                     </div>
                 </div>
 
-                <div class="bg-white p-6 rounded-t-xl shadow-sm border border-slate-200 border-b-0 flex flex-wrap gap-4 justify-between items-center">
+                <div class="bg-white p-6 rounded-t-2xl shadow-sm border border-slate-200/80 border-b-0 flex flex-wrap gap-4 justify-between items-center">
                     <div class="flex gap-2">
-                        <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow">Ciclo Dia 5</button>
-                        <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-semibold hover:bg-slate-50">Ciclo Dia 20</button>
+                        <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-lg font-semibold shadow-sm">Ciclo Dia 5</button>
+                        <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg font-semibold hover:bg-slate-50">Ciclo Dia 20</button>
                     </div>
                     <div class="flex flex-wrap items-center gap-3">
-                        <input type="text" id="buscaCobrancas" onkeyup="filtrarCobrancas()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
-                        <button onclick="gerarRelatorioCobrancas()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md font-semibold text-sm shadow">Gerar Relatório</button>
+                        <input type="text" id="buscaCobrancas" onkeyup="filtrarCobrancas()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2.5 border border-slate-200 bg-slate-50/50 rounded-xl text-sm focus:outline-none focus:border-[#0B192C] focus:bg-white w-64 shadow-sm">
+                        <button onclick="abrirModalCobranca()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-sm transition-all">+ Nova Cobrança</button>
+                        <button onclick="gerarRelatorioCobrancas()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-sm shadow-sm transition-all">Relatório</button>
                         <input type="file" id="upCobrancas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'cobrancas')" />
-                        <label for="upCobrancas" class="cursor-pointer px-4 py-2 bg-[#0B192C] hover:bg-[#1E3E62] text-white rounded-md font-semibold shadow-md flex items-center gap-2 text-sm">
-                            <span id="upCobrancasText">Importar Dados</span>
+                        <label for="upCobrancas" class="cursor-pointer px-4 py-2.5 bg-[#0B192C] hover:bg-[#162942] text-[#D4AF37] rounded-xl font-bold shadow-md flex items-center gap-2 text-sm border border-[#D4AF37]/30 transition-all">
+                            <span id="upCobrancasText">Importar Excel</span>
                         </label>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-b-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <table class="min-w-full divide-y divide-slate-200">
-                        <thead class="bg-slate-50">
+                <div class="bg-white rounded-b-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                    <table class="min-w-full divide-y divide-slate-100">
+                        <thead class="bg-slate-50/70">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Cliente</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Marca</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Vencimento</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Valor Parcela</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Valor Pago</th>
-                                <th class="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase">Parcelas Pagas</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Ações / Status</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Vencimento</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Parcela</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Pago</th>
+                                <th class="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Parcelas Pagas</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Ações / Status</th>
                             </tr>
                         </thead>
                         <tbody id="tabelaCobrancas" class="bg-white divide-y divide-slate-100"></tbody>
@@ -1136,42 +1324,44 @@
                 <div class="flex justify-between items-center mb-10">
                     <div>
                         <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Base Geral de Clientes</h2>
-                        <p class="text-slate-500 mt-1">Gestão de contatos, contratos e vendedoras.</p>
+                        <p class="text-slate-500 mt-1">Gestão completa de contatos, contratos, cadastro manual e vendedoras.</p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="text" id="buscaClientes" onkeyup="filtrarClientes()" placeholder="🔍 Pesquisar cliente, marca, CNPJ..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
-                        <button onclick="gerarRelatorioClientes()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md font-semibold text-sm shadow">Gerar Relatório</button>
+                        <input type="text" id="buscaClientes" onkeyup="filtrarClientes()" placeholder="🔍 Pesquisar cliente, marca, CNPJ..." class="px-4 py-2.5 border border-slate-200 bg-slate-50/50 rounded-xl text-sm focus:outline-none focus:border-[#0B192C] focus:bg-white w-64 shadow-sm">
+                        <button onclick="abrirModalCliente()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-sm transition-all">+ Novo Cliente</button>
+                        <button onclick="gerarRelatorioClientes()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-sm shadow-sm transition-all">Relatório</button>
                         <input type="file" id="upClientes" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'clientes')" />
-                        <label for="upClientes" class="cursor-pointer px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold shadow-md text-sm">
-                            <span id="upClientesText">Importar CLIENTES</span>
+                        <label for="upClientes" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] hover:bg-[#162942] text-[#D4AF37] rounded-xl font-bold shadow-md text-sm border border-[#D4AF37]/30 transition-all">
+                            <span id="upClientesText">Importar Excel</span>
                         </label>
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-[#0B192C]">
-                        <p class="text-xs font-bold text-slate-400 uppercase">Total de Clientes</p>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 border-l-4 border-l-[#0B192C]">
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Total de Clientes</p>
                         <p id="dashTotalCli" class="text-4xl font-black text-[#0B192C] mt-2">0</p>
                     </div>
-                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-emerald-600">
-                        <p class="text-xs font-bold text-slate-400 uppercase">Documentos Assinados</p>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 border-l-4 border-l-emerald-600">
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Documentos Assinados</p>
                         <p id="dashAssinados" class="text-4xl font-black text-emerald-600 mt-2">0</p>
                     </div>
-                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-amber-500">
-                        <p class="text-xs font-bold text-slate-400 uppercase">Documentos Pendentes</p>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 border-l-4 border-l-amber-500">
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Documentos Pendentes</p>
                         <p id="dashPendentes" class="text-4xl font-black text-amber-500 mt-2">0</p>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <table class="min-w-full divide-y divide-slate-200">
-                        <thead class="bg-slate-50">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                    <table class="min-w-full divide-y divide-slate-100">
+                        <thead class="bg-slate-50/70">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Cliente</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Marca</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">CNPJ</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Documento</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Vendedora</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">CNPJ</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Documento</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Vendedora</th>
+                                <th class="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Ações</th>
                             </tr>
                         </thead>
                         <tbody id="tabelaClientes" class="bg-white divide-y divide-slate-100"></tbody>
@@ -1184,27 +1374,27 @@
                 <div class="flex justify-between items-center mb-10">
                     <div>
                         <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Monitoramento INPI (RPI)</h2>
-                        <p class="text-slate-500 mt-1">Filtre os processos por fase clicando nos botões abaixo.</p>
+                        <p class="text-slate-500 mt-1">Filtre os processos por fase clicando nos cartões abaixo.</p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="text" id="buscaRPI" onkeyup="filtrarRPI('TODOS')" placeholder="🔍 Pesquisar processo ou marca..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
-                        <button onclick="gerarRelatorioRPI()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md font-semibold text-sm shadow">Gerar Relatório</button>
+                        <input type="text" id="buscaRPI" onkeyup="filtrarRPI('TODOS')" placeholder="🔍 Pesquisar processo ou marca..." class="px-4 py-2.5 border border-slate-200 bg-slate-50/50 rounded-xl text-sm focus:outline-none focus:border-[#0B192C] focus:bg-white w-64 shadow-sm">
+                        <button onclick="gerarRelatorioRPI()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-sm shadow-sm transition-all">Relatório</button>
                         <input type="file" id="upRpi" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'rpi')" />
-                        <label for="upRpi" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow-md text-sm">
-                            <span id="upRpiText">Importar RPI</span>
+                        <label for="upRpi" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37]/40 rounded-xl font-bold shadow-md text-sm transition-all">
+                            <span id="upRpiText">Importar Excel</span>
                         </label>
                     </div>
                 </div>
 
                 <div id="dashRpiContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"></div>
 
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <table class="min-w-full divide-y divide-slate-200">
-                        <thead class="bg-slate-50">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                    <table class="min-w-full divide-y divide-slate-100">
+                        <thead class="bg-slate-50/70">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Processo</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Marca</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Fase</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Processo</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Fase</th>
                             </tr>
                         </thead>
                         <tbody id="tabelaRPI" class="bg-white divide-y divide-slate-100"></tbody>
@@ -1212,7 +1402,7 @@
                 </div>
             </div>
 
-            <!-- ABA 4: GRU (ATUALIZADA) -->
+            <!-- ABA 4: GRU -->
             <div id="aba-gru" class="aba-conteudo hidden">
                 <div class="flex justify-between items-center mb-10">
                     <div>
@@ -1220,23 +1410,23 @@
                         <p class="text-slate-500 mt-1">Controle de pagamentos, vencimentos e anotações de situação.</p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="text" id="buscaGRU" onkeyup="filtrarGRU()" placeholder="🔍 Pesquisar cliente, marca ou anotação..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
-                        <button onclick="gerarRelatorioGRU()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md font-semibold text-sm shadow">Gerar Relatório</button>
+                        <input type="text" id="buscaGRU" onkeyup="filtrarGRU()" placeholder="🔍 Pesquisar cliente, marca ou anotação..." class="px-4 py-2.5 border border-slate-200 bg-slate-50/50 rounded-xl text-sm focus:outline-none focus:border-[#0B192C] focus:bg-white w-64 shadow-sm">
+                        <button onclick="gerarRelatorioGRU()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-sm shadow-sm transition-all">Relatório</button>
                         <input type="file" id="upGru" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'gru')" />
-                        <label for="upGru" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-white rounded-md font-semibold shadow-md text-sm">
-                            <span id="upGruText">Importar GRU</span>
+                        <label for="upGru" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-[#D4AF37] rounded-xl font-bold shadow-md text-sm border border-[#D4AF37]/30 transition-all">
+                            <span id="upGruText">Importar Excel</span>
                         </label>
                     </div>
                 </div>
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <table class="min-w-full divide-y divide-slate-200">
-                        <thead class="bg-slate-50">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                    <table class="min-w-full divide-y divide-slate-100">
+                        <thead class="bg-slate-50/70">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Cliente</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Marca</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Vencimento</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Status</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Anotações / Situação</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Vencimento</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Anotações / Situação</th>
                             </tr>
                         </thead>
                         <tbody id="tabelaGRU" class="bg-white divide-y divide-slate-100"></tbody>
@@ -1249,26 +1439,26 @@
                 <div class="flex justify-between items-center mb-10">
                     <div>
                         <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Fechamento Mensal / ADM</h2>
-                        <p class="text-slate-500 mt-1">Gestão de contratos administrativos.</p>
+                        <p class="text-slate-500 mt-1">Gestão de contratos administrativos e relatórios financeiros.</p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="text" id="buscaMensal" onkeyup="filtrarMensal()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
-                        <button onclick="gerarRelatorioMensal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md font-semibold text-sm shadow">Gerar Relatório</button>
+                        <input type="text" id="buscaMensal" onkeyup="filtrarMensal()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2.5 border border-slate-200 bg-slate-50/50 rounded-xl text-sm focus:outline-none focus:border-[#0B192C] focus:bg-white w-64 shadow-sm">
+                        <button onclick="gerarRelatorioMensal()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-sm shadow-sm transition-all">Relatório</button>
                         <input type="file" id="upMensal" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'mensal')" />
-                        <label for="upMensal" class="cursor-pointer px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold shadow-md text-sm">
-                            <span id="upMensalText">Importar ADMINISTRATIVO</span>
+                        <label for="upMensal" class="cursor-pointer px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md text-sm transition-all">
+                            <span id="upMensalText">Importar Excel</span>
                         </label>
                     </div>
                 </div>
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <table class="min-w-full divide-y divide-slate-200">
-                        <thead class="bg-slate-50">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                    <table class="min-w-full divide-y divide-slate-100">
+                        <thead class="bg-slate-50/70">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Cliente</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Marca</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Data</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Valor</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Status</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                             </tr>
                         </thead>
                         <tbody id="tabelaMensal" class="bg-white divide-y divide-slate-100"></tbody>
