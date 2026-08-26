@@ -67,10 +67,10 @@
                 } else {
                     menuAdmin.classList.add('hidden');
                     badgeRole.innerText = "👤 USUÁRIO";
-                    badgeRole.className = "text-xs font-bold text-slate-300 mt-1 tracking-wider";
+                    badgeRole.className = "text-xs font-bold text-slate-400 mt-1 tracking-wider";
                 }
 
-                abrirAba('cobrancas');
+                abrirAba('dashboard');
             } else {
                 telaLogin.classList.remove('hidden');
                 appContainer.classList.add('hidden');
@@ -168,22 +168,23 @@
                 const currentEmail = currentUser ? (currentUser.email || "").toLowerCase().trim() : "";
                 if (currentEmail !== EMAIL_ADMIN) {
                     alert("Acesso negado. Esta área é restrita exclusivamente ao administrador.");
-                    abrirAba('cobrancas');
+                    abrirAba('dashboard');
                     return;
                 }
             }
 
             document.querySelectorAll('.aba-conteudo').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.btn-menu').forEach(el => {
-                el.className = 'btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#162942] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent';
+                el.className = 'btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-[#112238] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent';
             });
 
             document.getElementById('aba-' + abaId).classList.remove('hidden');
             let btnAtivo = document.getElementById('btn-' + abaId);
             if (btnAtivo) {
-                btnAtivo.className = 'btn-menu w-full flex items-center gap-3 px-4 py-3 bg-[#162942] text-[#D4AF37] rounded-xl font-semibold transition-all text-left border-l-4 border-[#D4AF37] shadow-md';
+                btnAtivo.className = 'btn-menu w-full flex items-center gap-3 px-4 py-3 bg-[#112238] text-[#D4AF37] rounded-xl font-semibold transition-all text-left border-l-4 border-[#D4AF37] shadow-md';
             }
             
+            if(abaId === 'dashboard') carregarDashboardGeral();
             if(abaId === 'cobrancas') carregarCobrancas(cicloAtual);
             if(abaId === 'clientes') carregarClientes();
             if(abaId === 'rpi') carregarRPI();
@@ -192,12 +193,77 @@
             if(abaId === 'admin') carregarUsuariosAdmin();
         }
 
+        // --- DASHBOARD GERAL ---
+        window.carregarDashboardGeral = async function() {
+            try {
+                const [snapCob, snapCli, snapRpi, snapGru, snapMensal] = await Promise.all([
+                    getDocs(collection(db, "cobrancas")),
+                    getDocs(collection(db, "clientes")),
+                    getDocs(collection(db, "rpi_marcas")),
+                    getDocs(collection(db, "gru")),
+                    getDocs(collection(db, "mensal"))
+                ]);
+
+                let totalPrevisto = 0, totalPago = 0, totalCob = 0;
+                snapCob.forEach(d => {
+                    const dat = d.data();
+                    totalPrevisto += Number(dat.valor_total || 0);
+                    totalPago += Number(dat.valor_pago || 0);
+                    totalCob++;
+                });
+
+                let totalCli = 0, quitados = 0, inadimplentes = 0, valorTotalPc = 0;
+                let ultimosClientes = [];
+                snapCli.forEach(d => {
+                    const dat = d.data();
+                    totalCli++;
+                    valorTotalPc += Number(dat.valor_pc || 0);
+                    let st = String(dat.status_cliente || '').toUpperCase();
+                    if (st.includes('QUITADO') || st.includes('PAGANTE')) quitados++;
+                    if (st.includes('INADIMPLENTE') || st.includes('CANCELADO') || st.includes('NEGATIVADO')) inadimplentes++;
+                    ultimosClientes.push({ cliente: dat.cliente, marca: dat.empresa || dat.marca, status: dat.status_cliente || 'QUITADO', valor: dat.valor_pc || 0 });
+                });
+
+                let totalRpi = snapRpi.size;
+                let totalGru = snapGru.size;
+                let totalMensal = snapMensal.size;
+
+                document.getElementById('dashCardTotalClientes').innerText = totalCli;
+                document.getElementById('dashCardQuitados').innerText = quitados;
+                document.getElementById('dashCardInadimplentes').innerText = inadimplentes;
+                document.getElementById('dashCardValorTotal').innerText = `R$ ${valorTotalPc.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+                document.getElementById('dashCardArrecadado').innerText = `R$ ${totalPago.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+                document.getElementById('dashCardRpi').innerText = totalRpi;
+
+                const tabelaUltimos = document.getElementById('tabelaUltimosRegistros');
+                tabelaUltimos.innerHTML = '';
+                ultimosClientes.slice(-10).reverse().forEach(item => {
+                    let corSt = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+                    let stU = String(item.status).toUpperCase();
+                    if(stU.includes('INADIMPLENTE')) corSt = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+                    if(stU.includes('CANCELADO') || stU.includes('NEGATIVADO')) corSt = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+
+                    tabelaUltimos.innerHTML += `
+                        <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/50 transition-colors">
+                            <td class="px-6 py-4 text-sm text-white font-bold">${item.cliente || '-'}</td>
+                            <td class="px-6 py-4 text-sm text-slate-300">${item.marca || '-'}</td>
+                            <td class="px-6 py-4 text-sm"><span class="px-2.5 py-1 text-xs font-bold rounded-lg border ${corSt}">${item.status}</span></td>
+                            <td class="px-6 py-4 text-sm text-[#D4AF37] font-semibold">R$ ${Number(item.valor || 0).toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
+
+            } catch (e) {
+                console.error("Erro ao carregar dashboard:", e);
+            }
+        }
+
         // --- MÓDULO COBRANÇAS ---
         let cacheCobrancas = [];
         window.carregarCobrancas = async function(dia) {
             cicloAtual = dia;
-            document.getElementById('btnDia5').className = dia === 5 ? 'px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-lg font-semibold shadow-sm' : 'px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg font-semibold hover:bg-slate-50';
-            document.getElementById('btnDia20').className = dia === 20 ? 'px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-lg font-semibold shadow-sm' : 'px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg font-semibold hover:bg-slate-50';
+            document.getElementById('btnDia5').className = dia === 5 ? 'px-4 py-2 bg-[#D4AF37] text-[#070F18] border border-[#D4AF37] rounded-xl font-bold shadow-sm' : 'px-4 py-2 bg-[#0B192C] text-slate-300 border border-[#1E3859] rounded-xl font-semibold hover:bg-[#112238]';
+            document.getElementById('btnDia20').className = dia === 20 ? 'px-4 py-2 bg-[#D4AF37] text-[#070F18] border border-[#D4AF37] rounded-xl font-bold shadow-sm' : 'px-4 py-2 bg-[#0B192C] text-slate-300 border border-[#1E3859] rounded-xl font-semibold hover:bg-[#112238]';
             
             const tabela = document.getElementById('tabelaCobrancas');
             tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-slate-400">Consultando banco de dados...</td></tr>`;
@@ -224,7 +290,7 @@
 
                 renderizarTabelaCobrancas(cacheCobrancas);
                 atualizarCards(totalGeral, totalPago, count);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-rose-500">Erro ao carregar.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-rose-400">Erro ao carregar.</td></tr>`; }
         }
 
         window.renderizarTabelaCobrancas = function(dados) {
@@ -237,21 +303,21 @@
             let html = '';
             dados.forEach(data => {
                 const badge = data.status_pagamento === 'pago' 
-                    ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-md">PAGO</span>' 
-                    : '<span class="px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded-md">PENDENTE</span>';
+                    ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">PAGO</span>' 
+                    : '<span class="px-2.5 py-1 text-xs font-bold bg-amber-500/10 text-amber-400 rounded-lg border border-amber-500/20">PENDENTE</span>';
                 
                 html += `
-                    <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
-                        <td class="px-6 py-4 text-sm text-slate-800 font-bold">${String(data.cliente_id || '').substring(0, 25)}</td>
-                        <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
-                        <td class="px-6 py-4 text-sm text-slate-500">Dia ${data.dia_vencimento}</td>
-                        <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor_total || 0).toFixed(2)}</td>
-                        <td class="px-6 py-4 text-sm text-emerald-600 font-bold">R$ ${Number(data.valor_pago || 0).toFixed(2)}</td>
-                        <td class="px-6 py-4 text-sm text-slate-600 text-center font-medium">${data.parcelas_pagas || 0} / ${data.quantidade_parcelas || 1}</td>
+                    <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/50 transition-colors">
+                        <td class="px-6 py-4 text-sm text-white font-bold">${String(data.cliente_id || '').substring(0, 25)}</td>
+                        <td class="px-6 py-4 text-sm text-slate-300">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">Dia ${data.dia_vencimento}</td>
+                        <td class="px-6 py-4 text-sm text-white font-semibold">R$ ${Number(data.valor_total || 0).toFixed(2)}</td>
+                        <td class="px-6 py-4 text-sm text-emerald-400 font-bold">R$ ${Number(data.valor_pago || 0).toFixed(2)}</td>
+                        <td class="px-6 py-4 text-sm text-slate-300 text-center font-medium">${data.parcelas_pagas || 0} / ${data.quantidade_parcelas || 1}</td>
                         <td class="px-6 py-4 text-sm flex items-center gap-3">
                             ${badge}
-                            <button onclick="editarParcelas('${data.id}', ${data.parcelas_pagas || 0}, ${data.quantidade_parcelas || 1}, ${data.valor_total || 0})" class="px-3 py-1 bg-slate-100 hover:bg-[#0B192C] hover:text-[#D4AF37] text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all">Atualizar</button>
-                            <button onclick="excluirRegistroCobranca('${data.id}')" class="px-2 py-1 text-rose-500 hover:text-rose-700 text-xs font-bold">✕</button>
+                            <button onclick="editarParcelas('${data.id}', ${data.parcelas_pagas || 0}, ${data.quantidade_parcelas || 1}, ${data.valor_total || 0})" class="px-3 py-1 bg-[#112238] hover:bg-[#D4AF37] hover:text-[#070F18] text-slate-300 text-xs font-semibold rounded-lg border border-[#1E3859] transition-all">Atualizar</button>
+                            <button onclick="excluirRegistroCobranca('${data.id}')" class="px-2 py-1 text-rose-400 hover:text-rose-200 text-xs font-bold">✕</button>
                         </td>
                     </tr>
                 `;
@@ -290,15 +356,9 @@
 
             try {
                 await addDoc(collection(db, "cobrancas"), {
-                    cliente_id: cliente,
-                    marca: marca,
-                    cnpj: cnpj,
-                    dia_vencimento: dia,
-                    valor_total: valor,
-                    quantidade_parcelas: parcelas,
-                    parcelas_pagas: pagas,
-                    valor_pago: valorPago,
-                    status_pagamento: status
+                    cliente_id: cliente, marca: marca, cnpj: cnpj, dia_vencimento: dia,
+                    valor_total: valor, quantidade_parcelas: parcelas, parcelas_pagas: pagas,
+                    valor_pago: valorPago, status_pagamento: status
                 });
                 alert("Cobrança cadastrada com sucesso!");
                 fecharModalCobranca();
@@ -317,13 +377,13 @@
 
         window.gerarRelatorioCobrancas = function() {
             let janela = window.open('', '_blank');
-            janela.document.write(`<html><head><title>Relatório de Faturamento - Ciclo Dia ${cicloAtual}</title><script src="https://cdn.tailwindcss.com"><' + '/script></head><body class="p-10 font-sans">`);
-            janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório de Faturamento - Ciclo Dia ${cicloAtual}</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
-            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">Valor Parcela</th><th class="border p-2">Valor Pago</th><th class="border p-2">Status</th></tr>`);
+            janela.document.write(`<html><head><title>Relatório de Faturamento - Ciclo Dia ${cicloAtual}</title><script src="https://cdn.tailwindcss.com"><' + '/script></head><body class="p-10 font-sans bg-slate-900 text-white">`);
+            janela.document.write(`<h1 class="text-2xl font-black text-[#D4AF37]">Relatório de Faturamento - Ciclo Dia ${cicloAtual}</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
+            janela.document.write(`<table class="w-full border-collapse border border-slate-700 text-left text-xs"><tr class="bg-slate-800"><th class="border border-slate-700 p-2">Cliente</th><th class="border border-slate-700 p-2">Marca</th><th class="border border-slate-700 p-2">Valor Parcela</th><th class="border border-slate-700 p-2">Valor Pago</th><th class="border border-slate-700 p-2">Status</th></tr>`);
             cacheCobrancas.forEach(c => {
-                janela.document.write(`<tr><td class="border p-2 font-bold">${c.cliente_id}</td><td class="border p-2">${c.marca}</td><td class="border p-2">R$ ${Number(c.valor_total||0).toFixed(2)}</td><td class="border p-2 text-emerald-600 font-bold">R$ ${Number(c.valor_pago||0).toFixed(2)}</td><td class="border p-2 uppercase font-bold">${c.status_pagamento}</td></tr>`);
+                janela.document.write(`<tr><td class="border border-slate-700 p-2 font-bold">${c.cliente_id}</td><td class="border border-slate-700 p-2">${c.marca}</td><td class="border border-slate-700 p-2">R$ ${Number(c.valor_total||0).toFixed(2)}</td><td class="border border-slate-700 p-2 text-emerald-400 font-bold">R$ ${Number(c.valor_pago||0).toFixed(2)}</td><td class="border border-slate-700 p-2 uppercase font-bold">${c.status_pagamento}</td></tr>`);
             });
-            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#0B192C] text-white rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#D4AF37] text-slate-900 rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
         }
 
@@ -378,7 +438,7 @@
 
                 renderizarTabelaClientes(cacheClientes);
                 atualizarDashboardClientes(totalCli, quitadoCount, inadimplenteCount);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-rose-500">Erro ao carregar.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-rose-400">Erro ao carregar.</td></tr>`; }
         }
 
         window.renderizarTabelaClientes = function(dados) {
@@ -389,32 +449,31 @@
                 return;
             }
             let html = '';
-            // Renderiza até 500 registros para garantir alta performance sem travar o navegador
             const limiteRender = dados.slice(0, 500);
             limiteRender.forEach(data => {
                 let st = String(data.status_cliente || 'QUITADO').toUpperCase();
-                let corStatus = 'bg-emerald-100 text-emerald-800';
-                if (st.includes('INADIMPLENTE')) corStatus = 'bg-amber-100 text-amber-800';
-                if (st.includes('NEGATIVADO') || st.includes('CANCELADO')) corStatus = 'bg-rose-100 text-rose-800';
-                let badgeStatus = `<span class="px-2.5 py-1 text-xs font-bold ${corStatus} rounded-md">${data.status_cliente || 'QUITADO'}</span>`;
+                let corStatus = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+                if (st.includes('INADIMPLENTE')) corStatus = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+                if (st.includes('NEGATIVADO') || st.includes('CANCELADO')) corStatus = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+                let badgeStatus = `<span class="px-2.5 py-1 text-xs font-bold ${corStatus} rounded-lg border">${data.status_cliente || 'QUITADO'}</span>`;
 
                 html += `
-                    <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
-                        <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
-                        <td class="px-6 py-4 text-sm text-slate-600 font-medium">${data.empresa || data.marca || ''}</td>
-                        <td class="px-6 py-4 text-sm text-slate-500">${data.telefone || ''}</td>
-                        <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor_pc || 0).toFixed(2)}</td>
+                    <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/50 transition-colors">
+                        <td class="px-6 py-4 text-sm text-white font-bold">${data.cliente || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-300 font-medium">${data.empresa || data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">${data.telefone || ''}</td>
+                        <td class="px-6 py-4 text-sm text-white font-semibold">R$ ${Number(data.valor_pc || 0).toFixed(2)}</td>
                         <td class="px-6 py-4 text-sm">${badgeStatus}</td>
-                        <td class="px-6 py-4 text-sm text-slate-600">${data.anuidade || '-'}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">${data.anuidade || '-'}</td>
                         <td class="px-6 py-4 text-sm text-right space-x-2">
-                            <button onclick="abrirModalEditarCliente('${data.id}', \`${data.cliente || ''}\`, \`${data.empresa || data.marca || ''}\`, \`${data.telefone || ''}\`, ${data.valor_pc || 0}, \`${data.status_cliente || ''}\`, \`${data.anuidade || ''}\`)" class="px-3 py-1 bg-slate-100 hover:bg-[#0B192C] hover:text-[#D4AF37] text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all">Editar</button>
-                            <button onclick="excluirCliente('${data.id}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg transition-all">Excluir</button>
+                            <button onclick="abrirModalEditarCliente('${data.id}', \`${data.cliente || ''}\`, \`${data.empresa || data.marca || ''}\`, \`${data.telefone || ''}\`, ${data.valor_pc || 0}, \`${data.status_cliente || ''}\`, \`${data.anuidade || ''}\`)" class="px-3 py-1 bg-[#112238] hover:bg-[#D4AF37] hover:text-[#070F18] text-slate-300 text-xs font-semibold rounded-lg border border-[#1E3859] transition-all">Editar</button>
+                            <button onclick="excluirCliente('${data.id}')" class="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-xs font-bold rounded-lg transition-all border border-rose-500/20">Excluir</button>
                         </td>
                     </tr>
                 `;
             });
             if (dados.length > 500) {
-                html += `<tr><td colspan="7" class="px-6 py-4 text-center text-xs text-amber-600 font-bold">Exibindo os primeiros 500 registros de ${dados.length}. Utilize a busca para refinar os resultados.</td></tr>`;
+                html += `<tr><td colspan="7" class="px-6 py-4 text-center text-xs text-amber-400 font-bold">Exibindo os primeiros 500 registros de ${dados.length}. Utilize a busca para refinar.</td></tr>`;
             }
             tabela.innerHTML = html;
         }
@@ -487,13 +546,13 @@
 
         window.gerarRelatorioClientes = function() {
             let janela = window.open('', '_blank');
-            janela.document.write(`<html><head><title>Relatório - Base Marcas Financeiro</title><script src="https://cdn.tailwindcss.com"><' + '/script></head><body class="p-10 font-sans">`);
-            janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório - Base Marcas Financeiro</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
-            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Empresa</th><th class="border p-2">Tel.</th><th class="border p-2">Valor Pc</th><th class="border p-2">Status</th><th class="border p-2">Anuidade</th></tr>`);
+            janela.document.write(`<html><head><title>Relatório - Base Marcas Financeiro</title><script src="https://cdn.tailwindcss.com"><' + '/script></head><body class="p-10 font-sans bg-slate-900 text-white">`);
+            janela.document.write(`<h1 class="text-2xl font-black text-[#D4AF37]">Relatório - Base Marcas Financeiro</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
+            janela.document.write(`<table class="w-full border-collapse border border-slate-700 text-left text-xs"><tr class="bg-slate-800"><th class="border border-slate-700 p-2">Cliente</th><th class="border border-slate-700 p-2">Empresa</th><th class="border border-slate-700 p-2">Tel.</th><th class="border border-slate-700 p-2">Valor Pc</th><th class="border border-slate-700 p-2">Status</th><th class="border border-slate-700 p-2">Anuidade</th></tr>`);
             cacheClientes.forEach(c => {
-                janela.document.write(`<tr><td class="border p-2 font-bold">${c.cliente}</td><td class="border p-2">${c.empresa || c.marca || ''}</td><td class="border p-2">${c.telefone || ''}</td><td class="border p-2">R$ ${Number(c.valor_pc||0).toFixed(2)}</td><td class="border p-2 font-bold">${c.status_cliente}</td><td class="border p-2">${c.anuidade || ''}</td></tr>`);
+                janela.document.write(`<tr><td class="border border-slate-700 p-2 font-bold">${c.cliente}</td><td class="border border-slate-700 p-2">${c.empresa || c.marca || ''}</td><td class="border border-slate-700 p-2">${c.telefone || ''}</td><td class="border border-slate-700 p-2">R$ ${Number(c.valor_pc||0).toFixed(2)}</td><td class="border border-slate-700 p-2 font-bold">${c.status_cliente}</td><td class="border border-slate-700 p-2">${c.anuidade || ''}</td></tr>`);
             });
-            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#0B192C] text-white rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#D4AF37] text-slate-900 rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
         }
 
@@ -524,14 +583,14 @@
                 });
                 renderizarFiltrosRPI(contFases);
                 filtrarRPI('TODOS');
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-rose-500">Erro.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-rose-400">Erro.</td></tr>`; }
         }
 
         window.renderizarFiltrosRPI = function(contFases) {
             const container = document.getElementById('dashRpiContainer');
             container.innerHTML = `
-                <button onclick="filtrarRPI('TODOS')" class="p-4 bg-[#0B192C] text-[#D4AF37] rounded-xl shadow-sm border border-[#1E3E62] text-left font-bold hover:bg-[#162942] transition-all">
-                    <p class="text-[10px] uppercase tracking-widest text-slate-300">TODOS OS PROCESSOS</p>
+                <button onclick="filtrarRPI('TODOS')" class="p-4 bg-[#0B192C] text-[#D4AF37] rounded-xl shadow-sm border border-[#1E3859] text-left font-bold hover:bg-[#112238] transition-all">
+                    <p class="text-[10px] uppercase tracking-widest text-slate-400">TODOS OS PROCESSOS</p>
                     <p class="text-2xl mt-1">${rpiCache.length}</p>
                 </button>
             `;
@@ -540,9 +599,9 @@
                 let qtd = 0;
                 Object.keys(contFases).forEach(f => { if (f.includes(faseNome)) qtd += contFases[f]; });
                 container.innerHTML += `
-                    <button onclick="filtrarRPI('${faseNome}')" class="p-4 bg-white text-slate-800 rounded-xl shadow-sm border border-slate-200 text-left font-semibold hover:border-[#D4AF37] transition-all">
+                    <button onclick="filtrarRPI('${faseNome}')" class="p-4 bg-[#0B192C] text-white rounded-xl shadow-sm border border-[#1E3859] text-left font-semibold hover:border-[#D4AF37] transition-all">
                         <p class="text-[10px] uppercase tracking-widest text-slate-400 truncate">${faseNome}</p>
-                        <p class="text-2xl font-black text-[#0B192C] mt-1">${qtd}</p>
+                        <p class="text-2xl font-black text-[#D4AF37] mt-1">${qtd}</p>
                     </button>
                 `;
             });
@@ -568,10 +627,10 @@
             let html = '';
             filtrados.slice(0, 500).forEach(data => {
                 html += `
-                    <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
-                        <td class="px-6 py-4 text-sm font-mono text-slate-600 font-semibold">${data.processo || ''}</td>
-                        <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.marca || ''}</td>
-                        <td class="px-6 py-4 text-sm"><span class="px-2.5 py-1 text-xs font-bold bg-blue-50 text-blue-800 rounded-full border border-blue-100">${data.fase}</span></td>
+                    <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/50 transition-colors">
+                        <td class="px-6 py-4 text-sm font-mono text-slate-300 font-semibold">${data.processo || ''}</td>
+                        <td class="px-6 py-4 text-sm text-white font-bold">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm"><span class="px-2.5 py-1 text-xs font-bold bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">${data.fase}</span></td>
                     </tr>
                 `;
             });
@@ -580,13 +639,13 @@
 
         window.gerarRelatorioRPI = function() {
             let janela = window.open('', '_blank');
-            janela.document.write(`<html><head><title>Relatório de Processos RPI</title><script src="https://cdn.tailwindcss.com"><' + '/script></head><body class="p-10 font-sans">`);
-            janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório de Processos RPI (INPI)</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
-            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Processo</th><th class="border p-2">Marca</th><th class="border p-2">Fase</th></tr>`);
+            janela.document.write(`<html><head><title>Relatório de Processos RPI</title><script src="https://cdn.tailwindcss.com"><' + '/script></head><body class="p-10 font-sans bg-slate-900 text-white">`);
+            janela.document.write(`<h1 class="text-2xl font-black text-[#D4AF37]">Relatório de Processos RPI (INPI)</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
+            janela.document.write(`<table class="w-full border-collapse border border-slate-700 text-left text-xs"><tr class="bg-slate-800"><th class="border border-slate-700 p-2">Processo</th><th class="border border-slate-700 p-2">Marca</th><th class="border border-slate-700 p-2">Fase</th></tr>`);
             rpiCache.forEach(c => {
-                janela.document.write(`<tr><td class="border p-2 font-mono">${c.processo}</td><td class="border p-2 font-bold">${c.marca}</td><td class="border p-2 uppercase">${c.fase}</td></tr>`);
+                janela.document.write(`<tr><td class="border border-slate-700 p-2 font-mono">${c.processo}</td><td class="border border-slate-700 p-2 font-bold">${c.marca}</td><td class="border border-slate-700 p-2 uppercase">${c.fase}</td></tr>`);
             });
-            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#0B192C] text-white rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#D4AF37] text-slate-900 rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
         }
 
@@ -605,7 +664,7 @@
                     cacheGRU.push({ id: docSnap.id, ...data });
                 });
                 renderizarTabelaGRU(cacheGRU);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-rose-500">Erro.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-rose-400">Erro.</td></tr>`; }
         }
 
         window.renderizarTabelaGRU = function(dados) {
@@ -618,22 +677,22 @@
             let html = '';
             dados.slice(0, 500).forEach(data => {
                 const badgeStatus = data.status_pagamento === 'pago' 
-                    ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-md">PAGO</span>' 
-                    : '<span class="px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded-md">PENDENTE</span>';
+                    ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">PAGO</span>' 
+                    : '<span class="px-2.5 py-1 text-xs font-bold bg-amber-500/10 text-amber-400 rounded-lg border border-amber-500/20">PENDENTE</span>';
 
                 html += `
-                    <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
-                        <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
-                        <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
-                        <td class="px-6 py-4 text-sm text-slate-500">${data.vencimento || ''}</td>
+                    <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/50 transition-colors">
+                        <td class="px-6 py-4 text-sm text-white font-bold">${data.cliente || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-300">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">${data.vencimento || ''}</td>
                         <td class="px-6 py-4 text-sm flex items-center gap-2">
                             ${badgeStatus}
-                            <button onclick="alternarStatusGRU('${data.id}', '${data.status_pagamento || 'pendente'}')" class="px-2.5 py-1 bg-slate-100 hover:bg-[#0B192C] hover:text-[#D4AF37] text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all">Alterar</button>
+                            <button onclick="alternarStatusGRU('${data.id}', '${data.status_pagamento || 'pendente'}')" class="px-2.5 py-1 bg-[#112238] hover:bg-[#D4AF37] hover:text-[#070F18] text-slate-300 text-xs font-semibold rounded-lg border border-[#1E3859] transition-all">Alterar</button>
                         </td>
-                        <td class="px-6 py-4 text-sm text-slate-600">
+                        <td class="px-6 py-4 text-sm text-slate-300">
                             <div class="flex items-center gap-2">
-                                <span class="truncate max-w-xs text-xs text-slate-600">${data.anotacoes || 'Sem anotações'}</span>
-                                <button onclick="editarAnotacaoGRU('${data.id}', \`${data.anotacoes || ''}\`)" class="px-2.5 py-1 bg-slate-100 hover:bg-[#0B192C] hover:text-[#D4AF37] text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all">Editar</button>
+                                <span class="truncate max-w-xs text-xs text-slate-400">${data.anotacoes || 'Sem anotações'}</span>
+                                <button onclick="editarAnotacaoGRU('${data.id}', \`${data.anotacoes || ''}\`)" class="px-2.5 py-1 bg-[#112238] hover:bg-[#D4AF37] hover:text-[#070F18] text-slate-300 text-xs font-semibold rounded-lg border border-[#1E3859] transition-all">Editar</button>
                             </div>
                         </td>
                     </tr>
@@ -671,13 +730,13 @@
 
         window.gerarRelatorioGRU = function() {
             let janela = window.open('', '_blank');
-            janela.document.write(`<html><head><title>Relatório de Guias GRU</title><script src="https://cdn.tailwindcss.com"><' + '/script></head><body class="p-10 font-sans">`);
-            janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório de Guias GRU</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
-            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">Vencimento</th><th class="border p-2">Status</th><th class="border p-2">Anotações</th></tr>`);
+            janela.document.write(`<html><head><title>Relatório de Guias GRU</title><script src="https://cdn.tailwindcss.com"><' + '/script></head><body class="p-10 font-sans bg-slate-900 text-white">`);
+            janela.document.write(`<h1 class="text-2xl font-black text-[#D4AF37]">Relatório de Guias GRU</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
+            janela.document.write(`<table class="w-full border-collapse border border-slate-700 text-left text-xs"><tr class="bg-slate-800"><th class="border border-slate-700 p-2">Cliente</th><th class="border border-slate-700 p-2">Marca</th><th class="border border-slate-700 p-2">Vencimento</th><th class="border border-slate-700 p-2">Status</th><th class="border border-slate-700 p-2">Anotações</th></tr>`);
             cacheGRU.forEach(c => {
-                janela.document.write(`<tr><td class="border p-2 font-bold">${c.cliente}</td><td class="border p-2">${c.marca}</td><td class="border p-2">${c.vencimento}</td><td class="border p-2 uppercase font-bold">${c.status_pagamento || 'pendente'}</td><td class="border p-2">${c.anotacoes || ''}</td></tr>`);
+                janela.document.write(`<tr><td class="border border-slate-700 p-2 font-bold">${c.cliente}</td><td class="border border-slate-700 p-2">${c.marca}</td><td class="border border-slate-700 p-2">${c.vencimento}</td><td class="border border-slate-700 p-2 uppercase font-bold">${c.status_pagamento || 'pendente'}</td><td class="border border-slate-700 p-2">${c.anotacoes || ''}</td></tr>`);
             });
-            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#0B192C] text-white rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#D4AF37] text-slate-900 rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
         }
 
@@ -696,7 +755,7 @@
                     cacheMensal.push(data);
                 });
                 renderizarTabelaMensal(cacheMensal);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-rose-500">Erro.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-rose-400">Erro.</td></tr>`; }
         }
 
         window.renderizarTabelaMensal = function(dados) {
@@ -709,12 +768,12 @@
             let html = '';
             dados.slice(0, 500).forEach(data => {
                 html += `
-                    <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
-                        <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
-                        <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
-                        <td class="px-6 py-4 text-sm text-slate-500">${data.data_pagamento || ''}</td>
-                        <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor || 0).toFixed(2)}</td>
-                        <td class="px-6 py-4 text-sm font-bold text-emerald-600">${data.status || 'PAGO'}</td>
+                    <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/50 transition-colors">
+                        <td class="px-6 py-4 text-sm text-white font-bold">${data.cliente || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-300">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">${data.data_pagamento || ''}</td>
+                        <td class="px-6 py-4 text-sm text-white font-semibold">R$ ${Number(data.valor || 0).toFixed(2)}</td>
+                        <td class="px-6 py-4 text-sm font-bold text-emerald-400">${data.status || 'PAGO'}</td>
                     </tr>
                 `;
             });
@@ -732,13 +791,13 @@
 
         window.gerarRelatorioMensal = function() {
             let janela = window.open('', '_blank');
-            janela.document.write(`<html><head><title>Relatório Financeiro / Base Administrativo</title><script src="https://cdn.tailwindcss.com"><' + '/script></head><body class="p-10 font-sans">`);
-            janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório Financeiro / Base Administrativo</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
-            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">Data</th><th class="border p-2">Valor</th><th class="border p-2">Status</th></tr>`);
+            janela.document.write(`<html><head><title>Relatório Financeiro / Base Administrativo</title><script src="https://cdn.tailwindcss.com"><' + '/script></head><body class="p-10 font-sans bg-slate-900 text-white">`);
+            janela.document.write(`<h1 class="text-2xl font-black text-[#D4AF37]">Relatório Financeiro / Base Administrativo</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
+            janela.document.write(`<table class="w-full border-collapse border border-slate-700 text-left text-xs"><tr class="bg-slate-800"><th class="border border-slate-700 p-2">Cliente</th><th class="border border-slate-700 p-2">Marca</th><th class="border border-slate-700 p-2">Data</th><th class="border border-slate-700 p-2">Valor</th><th class="border border-slate-700 p-2">Status</th></tr>`);
             cacheMensal.forEach(c => {
-                janela.document.write(`<tr><td class="border p-2 font-bold">${c.cliente}</td><td class="border p-2">${c.marca}</td><td class="border p-2">${c.data_pagamento}</td><td class="border p-2 text-emerald-600 font-bold">R$ ${Number(c.valor||0).toFixed(2)}</td><td class="border p-2 uppercase font-bold">${c.status}</td></tr>`);
+                janela.document.write(`<tr><td class="border border-slate-700 p-2 font-bold">${c.cliente}</td><td class="border border-slate-700 p-2">${c.marca}</td><td class="border border-slate-700 p-2">${c.data_pagamento}</td><td class="border border-slate-700 p-2 text-emerald-400 font-bold">R$ ${Number(c.valor||0).toFixed(2)}</td><td class="border border-slate-700 p-2 uppercase font-bold">${c.status}</td></tr>`);
             });
-            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#0B192C] text-white rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#D4AF37] text-slate-900 rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
         }
 
@@ -746,27 +805,27 @@
         window.carregarUsuariosAdmin = async function() {
             const container = document.getElementById('listaUsuariosAdmin');
             container.innerHTML = `
-                <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm mb-6">
-                    <h3 class="text-lg font-bold text-[#0B192C]">Painel de Controle do Administrador</h3>
-                    <p class="text-slate-500 mt-1 text-sm">Gerencie quem tem permissão para acessar o sistema ou altere nomes e perfis.</p>
+                <div class="bg-[#0B192C] p-6 rounded-2xl border border-[#1E3859] shadow-sm mb-6">
+                    <h3 class="text-lg font-bold text-white">Painel de Controle do Administrador</h3>
+                    <p class="text-slate-400 mt-1 text-sm">Gerencie quem tem permissão para acessar o sistema ou altere nomes e perfis.</p>
                 </div>
 
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-                    <div class="p-6 border-b border-slate-100">
-                        <h4 class="font-bold text-[#0B192C]">Controle de Acessos</h4>
+                <div class="bg-[#0B192C] rounded-2xl shadow-sm border border-[#1E3859] overflow-hidden">
+                    <div class="p-6 border-b border-[#1E3859]">
+                        <h4 class="font-bold text-white">Controle de Acessos</h4>
                         <p class="text-xs text-slate-400 mt-0.5">Lista completa de contas cadastradas.</p>
                     </div>
-                    <table class="min-w-full divide-y divide-slate-100">
-                        <thead class="bg-slate-50/70">
+                    <table class="min-w-full divide-y divide-[#1E3859]">
+                        <thead class="bg-[#112238]">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Nome / Identificação</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">E-mail</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                                <th class="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Ações</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Nome / Identificação</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">E-mail</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Data</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Ações</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaUsuariosCadastrados" class="bg-white divide-y divide-slate-100">
+                        <tbody id="tabelaUsuariosCadastrados" class="bg-[#0B192C] divide-y divide-[#1E3859]">
                             <tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Carregando acessos...</td></tr>
                         </tbody>
                     </table>
@@ -788,19 +847,19 @@
                     const docId = docSnap.id;
                     const status = data.status || 'ativo';
                     const badgeStatus = status === 'ativo' 
-                        ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-md">ATIVO</span>' 
-                        : '<span class="px-2.5 py-1 text-xs font-bold bg-rose-100 text-rose-800 rounded-md">BLOQUEADO</span>';
+                        ? '<span class="px-2.5 py-1 text-xs font-bold bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">ATIVO</span>' 
+                        : '<span class="px-2.5 py-1 text-xs font-bold bg-rose-500/10 text-rose-400 rounded-lg border border-rose-500/20">BLOQUEADO</span>';
 
                     tbody.innerHTML += `
-                        <tr class="hover:bg-slate-50/80 border-b border-slate-100 transition-colors">
-                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.nome || '-'}</td>
-                            <td class="px-6 py-4 text-sm text-slate-600">${data.email || ''}</td>
-                            <td class="px-6 py-4 text-sm text-slate-500">${data.criado_em || '-'}</td>
+                        <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/50 transition-colors">
+                            <td class="px-6 py-4 text-sm text-white font-bold">${data.nome || '-'}</td>
+                            <td class="px-6 py-4 text-sm text-slate-300">${data.email || ''}</td>
+                            <td class="px-6 py-4 text-sm text-slate-400">${data.criado_em || '-'}</td>
                             <td class="px-6 py-4 text-sm">${badgeStatus}</td>
                             <td class="px-6 py-4 text-sm text-right space-x-2">
-                                <button onclick="editarNomeUsuario('${docId}', '${data.nome || ''}')" class="px-3 py-1 bg-slate-100 hover:bg-[#0B192C] hover:text-[#D4AF37] text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all">Editar Nome</button>
-                                <button onclick="alternarStatusUsuario('${docId}', '${status}')" class="px-3 py-1 ${status === 'ativo' ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'} text-xs font-semibold rounded-lg transition-all">${status === 'ativo' ? 'Bloquear' : 'Ativar'}</button>
-                                <button onclick="excluirUsuarioAdmin('${docId}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg transition-all">Excluir</button>
+                                <button onclick="editarNomeUsuario('${docId}', '${data.nome || ''}')" class="px-3 py-1 bg-[#112238] hover:bg-[#D4AF37] hover:text-[#070F18] text-slate-300 text-xs font-semibold rounded-lg border border-[#1E3859] transition-all">Editar Nome</button>
+                                <button onclick="alternarStatusUsuario('${docId}', '${status}')" class="px-3 py-1 ${status === 'ativo' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500 hover:text-white' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white'} text-xs font-semibold rounded-lg transition-all">${status === 'ativo' ? 'Bloquear' : 'Ativar'}</button>
+                                <button onclick="excluirUsuarioAdmin('${docId}')" class="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-xs font-bold rounded-lg transition-all border border-rose-500/20">Excluir</button>
                             </td>
                         </tr>
                     `;
@@ -850,7 +909,6 @@
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, {type: 'array'});
 
-                    // Função auxiliar para executar gravações em lotes de 400 (limite do Firestore é 500)
                     async function executarEmLotes(colecaoStr, listaDados, chaveUnicaFunc) {
                         const colRef = collection(db, colecaoStr);
                         const snapshot = await getDocs(colRef);
@@ -1044,84 +1102,84 @@
         }
     </script>
 </head>
-<body class="bg-[#f8fafc] min-h-screen flex font-sans text-slate-800">
+<body class="bg-[#070F18] min-h-screen flex font-sans text-slate-200">
 
     <!-- TELA DE LOGIN / CADASTRO / REDEFINIÇÃO -->
-    <div id="tela-login" class="fixed inset-0 bg-[#0B192C] z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl shadow-2xl p-10 max-w-md w-full border border-slate-100 text-center relative overflow-hidden">
+    <div id="tela-login" class="fixed inset-0 bg-[#070F18] z-50 flex items-center justify-center p-4">
+        <div class="bg-[#0B192C] rounded-3xl shadow-2xl p-10 max-w-md w-full border border-[#1E3859] text-center relative overflow-hidden">
             <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#0B192C] via-[#D4AF37] to-[#0B192C]"></div>
             
             <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-20 h-20 rounded-2xl object-cover shadow-lg border-2 border-[#D4AF37] mx-auto mb-4">
-            <h2 class="text-2xl font-black text-[#0B192C] tracking-tight">KRONOS GS</h2>
+            <h2 class="text-2xl font-black text-white tracking-tight">KRONOS GS</h2>
             <p class="text-[#D4AF37] text-[10px] uppercase tracking-[0.3em] font-extrabold mt-1">ERP Executive Suite</p>
             
             <form id="form-entrar" class="mt-8 space-y-4 text-left block" onsubmit="event.preventDefault(); fazerLogin();">
                 <div>
-                    <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider">E-mail</label>
-                    <input type="email" id="loginEmail" class="w-full mt-1.5 px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:outline-none focus:border-[#0B192C] focus:bg-white text-sm transition-all shadow-sm" placeholder="seu-email@empresa.com" required>
+                    <label class="block text-xs font-extrabold text-slate-400 uppercase tracking-wider">E-mail</label>
+                    <input type="email" id="loginEmail" class="w-full mt-1.5 px-4 py-3.5 rounded-xl border border-[#1E3859] bg-[#070F18] text-white focus:outline-none focus:border-[#D4AF37] text-sm transition-all shadow-sm" placeholder="seu-email@empresa.com" required>
                 </div>
                 <div>
-                    <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider">Senha</label>
-                    <input type="password" id="loginSenha" class="w-full mt-1.5 px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:outline-none focus:border-[#0B192C] focus:bg-white text-sm transition-all shadow-sm" placeholder="••••••••" required>
+                    <label class="block text-xs font-extrabold text-slate-400 uppercase tracking-wider">Senha</label>
+                    <input type="password" id="loginSenha" class="w-full mt-1.5 px-4 py-3.5 rounded-xl border border-[#1E3859] bg-[#070F18] text-white focus:outline-none focus:border-[#D4AF37] text-sm transition-all shadow-sm" placeholder="••••••••" required>
                 </div>
                 
                 <div class="flex items-center gap-2 pt-1">
-                    <input type="checkbox" id="lembrarAutorizado" class="w-4 h-4 text-[#0B192C] rounded border-slate-300 focus:ring-[#0B192C]">
-                    <label for="lembrarAutorizado" class="text-xs text-slate-600 font-medium cursor-pointer">Autorizar gravação do login neste dispositivo</label>
+                    <input type="checkbox" id="lembrarAutorizado" class="w-4 h-4 text-[#D4AF37] rounded border-[#1E3859] bg-[#070F18] focus:ring-[#D4AF37]">
+                    <label for="lembrarAutorizado" class="text-xs text-slate-400 font-medium cursor-pointer">Autorizar gravação do login neste dispositivo</label>
                 </div>
 
-                <button type="submit" class="w-full py-4 bg-[#0B192C] hover:bg-[#162942] text-[#D4AF37] font-extrabold rounded-xl shadow-lg transition-all tracking-wider text-sm border border-[#D4AF37]/50 mt-2">
+                <button type="submit" class="w-full py-4 bg-[#D4AF37] hover:bg-[#c29d30] text-[#070F18] font-extrabold rounded-xl shadow-lg transition-all tracking-wider text-sm mt-2">
                     ACESSAR SISTEMA
                 </button>
                 
-                <div class="flex justify-between items-center text-xs pt-3 border-t border-slate-100">
-                    <button type="button" onclick="mostrarPainelLogin('cadastro')" class="text-blue-600 hover:text-blue-800 font-bold transition-colors">Criar Cadastro</button>
-                    <button type="button" onclick="mostrarPainelLogin('redefinir')" class="text-slate-500 hover:text-slate-700 transition-colors">Esqueci a senha</button>
+                <div class="flex justify-between items-center text-xs pt-3 border-t border-[#1E3859]">
+                    <button type="button" onclick="mostrarPainelLogin('cadastro')" class="text-blue-400 hover:text-blue-300 font-bold transition-colors">Criar Cadastro</button>
+                    <button type="button" onclick="mostrarPainelLogin('redefinir')" class="text-slate-400 hover:text-slate-200 transition-colors">Esqueci a senha</button>
                 </div>
             </form>
 
             <form id="form-cadastro" class="mt-8 space-y-4 text-left hidden" onsubmit="event.preventDefault(); fazerCadastro();">
-                <h3 class="text-sm font-bold text-[#0B192C] uppercase border-b pb-2">Novo Cadastro</h3>
+                <h3 class="text-sm font-bold text-white uppercase border-b border-[#1E3859] pb-2">Novo Cadastro</h3>
                 <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase">E-mail</label>
-                    <input type="email" id="cadEmail" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" placeholder="novo@empresa.com" required>
+                    <label class="block text-xs font-bold text-slate-400 uppercase">E-mail</label>
+                    <input type="email" id="cadEmail" class="w-full mt-1 px-4 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]" placeholder="novo@empresa.com" required>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase">Senha</label>
-                    <input type="password" id="cadSenha" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" placeholder="••••••••" required>
+                    <label class="block text-xs font-bold text-slate-400 uppercase">Senha</label>
+                    <input type="password" id="cadSenha" class="w-full mt-1 px-4 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]" placeholder="••••••••" required>
                 </div>
                 <button type="submit" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-all text-sm">
                     CADASTRAR CONTA
                 </button>
-                <div class="text-center pt-3 border-t border-slate-100">
-                    <button type="button" onclick="mostrarPainelLogin('entrar')" class="text-xs text-slate-600 hover:underline font-semibold">← Voltar para o Login</button>
+                <div class="text-center pt-3 border-t border-[#1E3859]">
+                    <button type="button" onclick="mostrarPainelLogin('entrar')" class="text-xs text-slate-400 hover:underline font-semibold">← Voltar para o Login</button>
                 </div>
             </form>
 
             <form id="form-redefinir" class="mt-8 space-y-4 text-left hidden" onsubmit="event.preventDefault(); redefinirSenha();">
-                <h3 class="text-sm font-bold text-[#0B192C] uppercase border-b pb-2">Redefinir Senha</h3>
+                <h3 class="text-sm font-bold text-white uppercase border-b border-[#1E3859] pb-2">Redefinir Senha</h3>
                 <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase">E-mail cadastrado</label>
-                    <input type="email" id="redEmail" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" placeholder="seu-email@empresa.com" required>
+                    <label class="block text-xs font-bold text-slate-400 uppercase">E-mail cadastrado</label>
+                    <input type="email" id="redEmail" class="w-full mt-1 px-4 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]" placeholder="seu-email@empresa.com" required>
                 </div>
-                <button type="submit" class="w-full py-3.5 bg-[#0B192C] hover:bg-[#162942] text-[#D4AF37] font-bold rounded-xl shadow-md transition-all text-sm border border-[#D4AF37]">
+                <button type="submit" class="w-full py-3.5 bg-[#D4AF37] hover:bg-[#c29d30] text-[#070F18] font-bold rounded-xl shadow-md transition-all text-sm">
                     ENVIAR INSTRUÇÕES
                 </button>
-                <div class="text-center pt-3 border-t border-slate-100">
-                    <button type="button" onclick="mostrarPainelLogin('entrar')" class="text-xs text-slate-600 hover:underline font-semibold">← Voltar para o Login</button>
+                <div class="text-center pt-3 border-t border-[#1E3859]">
+                    <button type="button" onclick="mostrarPainelLogin('entrar')" class="text-xs text-slate-400 hover:underline font-semibold">← Voltar para o Login</button>
                 </div>
             </form>
 
-            <p id="loginErro" class="text-center text-xs font-semibold text-rose-600 mt-4"></p>
-            <p id="loginSucesso" class="text-center text-xs font-semibold text-emerald-600 mt-4"></p>
+            <p id="loginErro" class="text-center text-xs font-semibold text-rose-400 mt-4"></p>
+            <p id="loginSucesso" class="text-center text-xs font-semibold text-emerald-400 mt-4"></p>
         </div>
     </div>
 
     <!-- APLICAÇÃO PRINCIPAL -->
     <div id="app-container" class="hidden flex w-full">
-        <!-- MENU LATERAL EXECUTIVO (AZUL E DOURADO) -->
-        <aside class="w-72 bg-[#0B192C] text-white min-h-screen flex flex-col fixed shadow-2xl z-10 border-r border-[#162942]">
-            <div class="p-6 border-b border-[#162942] flex items-center gap-3 bg-[#08121f]">
+        <!-- MENU LATERAL EXECUTIVO -->
+        <aside class="w-72 bg-[#0B192C] text-white min-h-screen flex flex-col fixed shadow-2xl z-10 border-r border-[#1E3859]">
+            <div class="p-6 border-b border-[#1E3859] flex items-center gap-3 bg-[#070F18]">
                 <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-12 h-12 rounded-xl object-cover shadow-md border-2 border-[#D4AF37]">
                 <div>
                     <h1 class="text-lg font-black tracking-widest text-white">KRONOS GS</h1>
@@ -1130,69 +1188,75 @@
             </div>
             
             <nav class="flex-1 px-4 py-6 space-y-2">
-                <button id="btn-cobrancas" onclick="abrirAba('cobrancas')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#162942] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
+                <p class="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider px-4 mb-2">Principal</p>
+                <button id="btn-dashboard" onclick="abrirAba('dashboard')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 bg-[#112238] text-[#D4AF37] rounded-xl font-semibold transition-all text-left border-l-4 border-[#D4AF37] shadow-md">
+                    🏠 Dashboard Geral
+                </button>
+                <button id="btn-cobrancas" onclick="abrirAba('cobrancas')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-[#112238] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
                     📊 Faturamento (5 e 20)
                 </button>
-                <button id="btn-clientes" onclick="abrirAba('clientes')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#162942] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
+                
+                <p class="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider px-4 mt-6 mb-2">Gestão</p>
+                <button id="btn-clientes" onclick="abrirAba('clientes')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-[#112238] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
                     👥 Base Marcas Financeiro
                 </button>
-                <button id="btn-rpi" onclick="abrirAba('rpi')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#162942] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
+                <button id="btn-rpi" onclick="abrirAba('rpi')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-[#112238] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
                     📖 Revistas RPI (INPI)
                 </button>
-                <button id="btn-gru" onclick="abrirAba('gru')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#162942] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
+                <button id="btn-gru" onclick="abrirAba('gru')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-[#112238] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
                     📑 Planilha da GRU
                 </button>
-                <button id="btn-mensal" onclick="abrirAba('mensal')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-[#162942] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
+                <button id="btn-mensal" onclick="abrirAba('mensal')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-[#112238] hover:text-white rounded-xl font-medium transition-all text-left border-l-4 border-transparent">
                     💰 Base Administrativo
                 </button>
-                <button id="menu-admin" onclick="abrirAba('admin')" class="btn-menu hidden w-full flex items-center gap-3 px-4 py-3 text-amber-400 hover:bg-[#162942] rounded-xl font-medium transition-all text-left border-l-4 border-amber-400">
+                <button id="menu-admin" onclick="abrirAba('admin')" class="btn-menu hidden w-full flex items-center gap-3 px-4 py-3 text-amber-400 hover:bg-[#112238] rounded-xl font-medium transition-all text-left border-l-4 border-amber-400">
                     🔐 Gestão de Usuários (Admin)
                 </button>
             </nav>
 
-            <div class="p-6 space-y-3 bg-[#08121f] border-t border-[#162942]">
-                <div class="bg-[#112238] rounded-xl p-3.5 text-center border border-[#1e3859]">
+            <div class="p-6 space-y-3 bg-[#070F18] border-t border-[#1E3859]">
+                <div class="bg-[#0B192C] rounded-xl p-3.5 text-center border border-[#1E3859]">
                     <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Sistema Conectado</p>
                     <p id="badge-role" class="text-xs font-bold mt-1"></p>
                 </div>
 
-                <button onclick="fazerLogout()" class="w-full py-3 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white text-xs font-bold rounded-xl border border-rose-500/30 transition-all shadow-sm">
+                <button onclick="fazerLogout()" class="w-full py-3 bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white text-xs font-bold rounded-xl border border-rose-500/20 transition-all shadow-sm">
                     Sair do Sistema (Logout)
                 </button>
             </div>
         </aside>
 
         <!-- CONTEÚDO PRINCIPAL -->
-        <main class="ml-72 flex-1 p-10 w-full bg-[#f8fafc] min-h-screen">
+        <main class="ml-72 flex-1 p-10 w-full bg-[#070F18] min-h-screen">
 
             <!-- MODAL REGISTRO CLIENTE/MARCA (NOVO / EDITAR) -->
-            <div id="modalCliente" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-                <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 border border-slate-100 relative">
-                    <h3 id="modalClienteTitulo" class="text-xl font-black text-[#0B192C] mb-6">Novo Registro</h3>
+            <div id="modalCliente" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+                <div class="bg-[#0B192C] rounded-3xl shadow-2xl max-w-lg w-full p-8 border border-[#1E3859] relative text-white">
+                    <h3 id="modalClienteTitulo" class="text-xl font-black text-white mb-6">Novo Registro</h3>
                     <form id="formCliente" onsubmit="salvarClienteManual(event)" class="space-y-4">
                         <input type="hidden" id="cliDocId">
                         <div>
-                            <label class="block text-xs font-extrabold text-slate-500 uppercase">Cliente</label>
-                            <input type="text" id="cliCliente" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
+                            <label class="block text-xs font-extrabold text-slate-400 uppercase">Cliente</label>
+                            <input type="text" id="cliCliente" class="w-full mt-1 px-4 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]" required>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Empresa / Marca</label>
-                                <input type="text" id="cliEmpresa" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
+                                <label class="block text-xs font-extrabold text-slate-400 uppercase">Empresa / Marca</label>
+                                <input type="text" id="cliEmpresa" class="w-full mt-1 px-4 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]" required>
                             </div>
                             <div>
-                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Tel.</label>
-                                <input type="text" id="cliTelefone" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
+                                <label class="block text-xs font-extrabold text-slate-400 uppercase">Tel.</label>
+                                <input type="text" id="cliTelefone" class="w-full mt-1 px-4 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]">
                             </div>
                         </div>
                         <div class="grid grid-cols-3 gap-3">
                             <div>
-                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Valor Pc (R$)</label>
-                                <input type="number" step="0.01" id="cliValorPc" class="w-full mt-1 px-3 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
+                                <label class="block text-xs font-extrabold text-slate-400 uppercase">Valor Pc (R$)</label>
+                                <input type="number" step="0.01" id="cliValorPc" class="w-full mt-1 px-3 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]" required>
                             </div>
                             <div>
-                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Status</label>
-                                <select id="cliStatusCli" class="w-full mt-1 px-3 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C] bg-white">
+                                <label class="block text-xs font-extrabold text-slate-400 uppercase">Status</label>
+                                <select id="cliStatusCli" class="w-full mt-1 px-3 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]">
                                     <option value="QUITADO">QUITADO</option>
                                     <option value="INADIMPLENTE">INADIMPLENTE</option>
                                     <option value="CANCELADO">CANCELADO</option>
@@ -1200,120 +1264,190 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Anuidade</label>
-                                <input type="text" id="cliAnuidade" class="w-full mt-1 px-3 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
+                                <label class="block text-xs font-extrabold text-slate-400 uppercase">Anuidade</label>
+                                <input type="text" id="cliAnuidade" class="w-full mt-1 px-3 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]">
                             </div>
                         </div>
-                        <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                            <button type="button" onclick="fecharModalCliente()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">Cancelar</button>
-                            <button type="submit" class="px-6 py-2.5 bg-[#0B192C] hover:bg-[#162942] text-[#D4AF37] text-xs font-extrabold rounded-xl shadow-md transition-all">Salvar Registro</button>
+                        <div class="flex justify-end gap-3 pt-4 border-t border-[#1E3859]">
+                            <button type="button" onclick="fecharModalCliente()" class="px-5 py-2.5 bg-[#112238] hover:bg-[#1E3859] text-slate-300 text-xs font-bold rounded-xl transition-all">Cancelar</button>
+                            <button type="submit" class="px-6 py-2.5 bg-[#D4AF37] hover:bg-[#c29d30] text-[#070F18] text-xs font-extrabold rounded-xl shadow-md transition-all">Salvar Registro</button>
                         </div>
                     </form>
                 </div>
             </div>
 
             <!-- MODAL COBRANÇA (NOVA MANUAL) -->
-            <div id="modalCobranca" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-                <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 border border-slate-100 relative">
-                    <h3 class="text-xl font-black text-[#0B192C] mb-6">Nova Cobrança / Faturamento</h3>
+            <div id="modalCobranca" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+                <div class="bg-[#0B192C] rounded-3xl shadow-2xl max-w-lg w-full p-8 border border-[#1E3859] relative text-white">
+                    <h3 class="text-xl font-black text-white mb-6">Nova Cobrança / Faturamento</h3>
                     <form id="formCobrancaManual" onsubmit="salvarCobrancaManual(event)" class="space-y-4">
                         <div>
-                            <label class="block text-xs font-extrabold text-slate-500 uppercase">Cliente</label>
-                            <input type="text" id="cobCliente" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
+                            <label class="block text-xs font-extrabold text-slate-400 uppercase">Cliente</label>
+                            <input type="text" id="cobCliente" class="w-full mt-1 px-4 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]" required>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Marca</label>
-                                <input type="text" id="cobMarca" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
+                                <label class="block text-xs font-extrabold text-slate-400 uppercase">Marca</label>
+                                <input type="text" id="cobMarca" class="w-full mt-1 px-4 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]">
                             </div>
                             <div>
-                                <label class="block text-xs font-extrabold text-slate-500 uppercase">CNPJ</label>
-                                <input type="text" id="cobCnpj" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
+                                <label class="block text-xs font-extrabold text-slate-400 uppercase">CNPJ</label>
+                                <input type="text" id="cobCnpj" class="w-full mt-1 px-4 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]">
                             </div>
                         </div>
                         <div class="grid grid-cols-3 gap-3">
                             <div>
-                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Ciclo (Dia)</label>
-                                <select id="cobDia" class="w-full mt-1 px-3 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]">
+                                <label class="block text-xs font-extrabold text-slate-400 uppercase">Ciclo (Dia)</label>
+                                <select id="cobDia" class="w-full mt-1 px-3 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]">
                                     <option value="5">Dia 5</option>
                                     <option value="20">Dia 20</option>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Valor Parcela (R$)</label>
-                                <input type="number" step="0.01" id="cobValor" class="w-full mt-1 px-3 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
+                                <label class="block text-xs font-extrabold text-slate-400 uppercase">Valor Parcela (R$)</label>
+                                <input type="number" step="0.01" id="cobValor" class="w-full mt-1 px-3 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]" required>
                             </div>
                             <div>
-                                <label class="block text-xs font-extrabold text-slate-500 uppercase">Total Parcelas</label>
-                                <input type="number" id="cobParcelas" value="1" class="w-full mt-1 px-3 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
+                                <label class="block text-xs font-extrabold text-slate-400 uppercase">Total Parcelas</label>
+                                <input type="number" id="cobParcelas" value="1" class="w-full mt-1 px-3 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]" required>
                             </div>
                         </div>
                         <div>
-                            <label class="block text-xs font-extrabold text-slate-500 uppercase">Parcelas Já Pagas</label>
-                            <input type="number" id="cobPagas" value="0" class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#0B192C]" required>
+                            <label class="block text-xs font-extrabold text-slate-400 uppercase">Parcelas Já Pagas</label>
+                            <input type="number" id="cobPagas" value="0" class="w-full mt-1 px-4 py-3 rounded-xl border border-[#1E3859] bg-[#070F18] text-white text-sm focus:outline-none focus:border-[#D4AF37]" required>
                         </div>
-                        <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                            <button type="button" onclick="fecharModalCobranca()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">Cancelar</button>
-                            <button type="submit" class="px-6 py-2.5 bg-[#0B192C] hover:bg-[#162942] text-[#D4AF37] text-xs font-extrabold rounded-xl shadow-md transition-all">Salvar Cobrança</button>
+                        <div class="flex justify-end gap-3 pt-4 border-t border-[#1E3859]">
+                            <button type="button" onclick="fecharModalCobranca()" class="px-5 py-2.5 bg-[#112238] hover:bg-[#1E3859] text-slate-300 text-xs font-bold rounded-xl transition-all">Cancelar</button>
+                            <button type="submit" class="px-6 py-2.5 bg-[#D4AF37] hover:bg-[#c29d30] text-[#070F18] text-xs font-extrabold rounded-xl shadow-md transition-all">Salvar Cobrança</button>
                         </div>
                     </form>
                 </div>
             </div>
 
-            <!-- ABA 1: COBRANÇAS -->
-            <div id="aba-cobrancas" class="aba-conteudo block">
+            <!-- ABA 0: DASHBOARD GERAL -->
+            <div id="aba-dashboard" class="aba-conteudo block">
                 <div class="flex justify-between items-center mb-10">
                     <div>
-                        <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Faturamento e Ciclos</h2>
-                        <p class="text-slate-500 mt-1">Gestão de pagamentos dos dias 5 e 20 com baixa automática de parcelas.</p>
+                        <h2 class="text-3xl font-black text-white tracking-tight">Dashboard Executivo</h2>
+                        <p class="text-slate-400 mt-1">Resumo consolidado de todas as funções, valores de parcelas e status do sistema.</p>
+                    </div>
+                </div>
+
+                <!-- CARDS DE MÉTRICAS -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 text-[#D4AF37] opacity-20 text-4xl">👥</div>
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Total de Clientes (Base)</p>
+                        <p id="dashCardTotalClientes" class="text-4xl font-black text-white mt-2">0</p>
+                    </div>
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 text-emerald-400 opacity-20 text-4xl">✅</div>
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Quitados / Pagantes</p>
+                        <p id="dashCardQuitados" class="text-4xl font-black text-emerald-400 mt-2">0</p>
+                    </div>
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 text-amber-400 opacity-20 text-4xl">⚠️</div>
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Inadimplentes / Cancelados</p>
+                        <p id="dashCardInadimplentes" class="text-4xl font-black text-amber-400 mt-2">0</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 text-[#D4AF37] opacity-20 text-4xl">💰</div>
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Valor Total de Parcelas (PC)</p>
+                        <p id="dashCardValorTotal" class="text-3xl font-black text-[#D4AF37] mt-2">R$ 0,00</p>
+                    </div>
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 text-emerald-400 opacity-20 text-4xl">📥</div>
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Total Arrecadado (Faturamento)</p>
+                        <p id="dashCardArrecadado" class="text-3xl font-black text-emerald-400 mt-2">R$ 0,00</p>
+                    </div>
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 text-blue-400 opacity-20 text-4xl">📖</div>
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Processos INPI (RPI)</p>
+                        <p id="dashCardRpi" class="text-3xl font-black text-blue-400 mt-2">0</p>
+                    </div>
+                </div>
+
+                <!-- ÚLTIMOS REGISTROS -->
+                <div class="bg-[#0B192C] rounded-2xl shadow-sm border border-[#1E3859] overflow-hidden">
+                    <div class="p-6 border-b border-[#1E3859] flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold text-white text-lg">Últimos Registros e Movimentações</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Visão geral recente da base de marcas e clientes.</p>
+                        </div>
+                    </div>
+                    <table class="min-w-full divide-y divide-[#1E3859]">
+                        <thead class="bg-[#112238]">
+                            <tr>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Marca / Empresa</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Valor Pc</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaUltimosRegistros" class="bg-[#0B192C] divide-y divide-[#1E3859]">
+                            <tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Carregando registros...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ABA 1: COBRANÇAS -->
+            <div id="aba-cobrancas" class="aba-conteudo hidden">
+                <div class="flex justify-between items-center mb-10">
+                    <div>
+                        <h2 class="text-3xl font-black text-white tracking-tight">Faturamento e Ciclos</h2>
+                        <p class="text-slate-400 mt-1">Gestão de pagamentos dos dias 5 e 20 com baixa automática de parcelas.</p>
                     </div>
                 </div>
                 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859]">
                         <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Previsto (Ciclo)</p>
-                        <p id="totalPrevisto" class="text-4xl font-black text-[#0B192C] mt-2">R$ 0,00</p>
+                        <p id="totalPrevisto" class="text-4xl font-black text-white mt-2">R$ 0,00</p>
                     </div>
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859]">
                         <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Arrecadado</p>
-                        <p id="totalArrecadado" class="text-4xl font-black text-emerald-600 mt-2">R$ 0,00</p>
+                        <p id="totalArrecadado" class="text-4xl font-black text-emerald-400 mt-2">R$ 0,00</p>
                     </div>
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859]">
                         <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Registros Ativos</p>
-                        <p id="totalClientes" class="text-4xl font-black text-blue-600 mt-2">0</p>
+                        <p id="totalClientes" class="text-4xl font-black text-blue-400 mt-2">0</p>
                     </div>
                 </div>
 
-                <div class="bg-white p-6 rounded-t-2xl shadow-sm border border-slate-200/80 border-b-0 flex flex-wrap gap-4 justify-between items-center">
+                <div class="bg-[#0B192C] p-6 rounded-t-2xl shadow-sm border border-[#1E3859] border-b-0 flex flex-wrap gap-4 justify-between items-center">
                     <div class="flex gap-2">
-                        <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-lg font-semibold shadow-sm">Ciclo Dia 5</button>
-                        <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg font-semibold hover:bg-slate-50">Ciclo Dia 20</button>
+                        <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-[#D4AF37] text-[#070F18] border border-[#D4AF37] rounded-xl font-bold shadow-sm">Ciclo Dia 5</button>
+                        <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-[#0B192C] text-slate-300 border border-[#1E3859] rounded-xl font-semibold hover:bg-[#112238]">Ciclo Dia 20</button>
                     </div>
                     <div class="flex flex-wrap items-center gap-3">
-                        <input type="text" id="buscaCobrancas" onkeyup="filtrarCobrancas()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2.5 border border-slate-200 bg-slate-50/50 rounded-xl text-sm focus:outline-none focus:border-[#0B192C] focus:bg-white w-64 shadow-sm">
+                        <input type="text" id="buscaCobrancas" onkeyup="filtrarCobrancas()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2.5 border border-[#1E3859] bg-[#070F18] text-white rounded-xl text-sm focus:outline-none focus:border-[#D4AF37] w-64 shadow-sm">
                         <button onclick="abrirModalCobranca()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-sm transition-all">+ Nova Cobrança</button>
-                        <button onclick="gerarRelatorioCobrancas()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-sm shadow-sm transition-all">Relatório</button>
+                        <button onclick="gerarRelatorioCobrancas()" class="px-4 py-2.5 bg-[#112238] hover:bg-[#1E3859] text-white rounded-xl font-bold text-sm shadow-sm border border-[#1E3859] transition-all">Relatório</button>
                         <input type="file" id="upCobrancas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'cobrancas')" />
-                        <label for="upCobrancas" class="cursor-pointer px-4 py-2.5 bg-[#0B192C] hover:bg-[#162942] text-[#D4AF37] rounded-xl font-bold shadow-md flex items-center gap-2 text-sm border border-[#D4AF37]/30 transition-all">
+                        <label for="upCobrancas" class="cursor-pointer px-4 py-2.5 bg-[#D4AF37] hover:bg-[#c29d30] text-[#070F18] rounded-xl font-bold shadow-md flex items-center gap-2 text-sm transition-all">
                             <span id="upCobrancasText">Importar Excel</span>
                         </label>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-b-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-                    <table class="min-w-full divide-y divide-slate-100">
-                        <thead class="bg-slate-50/70">
+                <div class="bg-[#0B192C] rounded-b-2xl shadow-sm border border-[#1E3859] overflow-hidden">
+                    <table class="min-w-full divide-y divide-[#1E3859]">
+                        <thead class="bg-[#112238]">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Vencimento</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Parcela</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Pago</th>
-                                <th class="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Parcelas Pagas</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Ações / Status</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Vencimento</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Valor Parcela</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Valor Pago</th>
+                                <th class="px-6 py-4 text-center text-xs font-bold text-slate-400 uppercase tracking-wider">Parcelas Pagas</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Ações / Status</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaCobrancas" class="bg-white divide-y divide-slate-100"></tbody>
+                        <tbody id="tabelaCobrancas" class="bg-[#0B192C] divide-y divide-[#1E3859]"></tbody>
                     </table>
                 </div>
             </div>
@@ -1322,49 +1456,49 @@
             <div id="aba-clientes" class="aba-conteudo hidden">
                 <div class="flex justify-between items-center mb-10">
                     <div>
-                        <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Base Marcas Financeiro</h2>
-                        <p class="text-slate-500 mt-1">Gestão de Empresas, Clientes, Telefones, Valores, Status e Anuidades.</p>
+                        <h2 class="text-3xl font-black text-white tracking-tight">Base Marcas Financeiro</h2>
+                        <p class="text-slate-400 mt-1">Gestão de Empresas, Clientes, Telefones, Valores, Status e Anuidades.</p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="text" id="buscaClientes" onkeyup="filtrarClientes()" placeholder="🔍 Pesquisar empresa, cliente, status..." class="px-4 py-2.5 border border-slate-200 bg-slate-50/50 rounded-xl text-sm focus:outline-none focus:border-[#0B192C] focus:bg-white w-64 shadow-sm">
+                        <input type="text" id="buscaClientes" onkeyup="filtrarClientes()" placeholder="🔍 Pesquisar empresa, cliente, status..." class="px-4 py-2.5 border border-[#1E3859] bg-[#0B192C] text-white rounded-xl text-sm focus:outline-none focus:border-[#D4AF37] w-64 shadow-sm">
                         <button onclick="abrirModalCliente()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-sm transition-all">+ Novo Registro</button>
-                        <button onclick="gerarRelatorioClientes()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-sm shadow-sm transition-all">Relatório</button>
+                        <button onclick="gerarRelatorioClientes()" class="px-4 py-2.5 bg-[#112238] hover:bg-[#1E3859] text-white rounded-xl font-bold text-sm shadow-sm border border-[#1E3859] transition-all">Relatório</button>
                         <input type="file" id="upClientes" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'clientes')" />
-                        <label for="upClientes" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] hover:bg-[#162942] text-[#D4AF37] rounded-xl font-bold shadow-md text-sm border border-[#D4AF37]/30 transition-all">
+                        <label for="upClientes" class="cursor-pointer px-5 py-2.5 bg-[#D4AF37] hover:bg-[#c29d30] text-[#070F18] rounded-xl font-bold shadow-md text-sm transition-all">
                             <span id="upClientesText">Importar Excel</span>
                         </label>
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 border-l-4 border-l-[#0B192C]">
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] border-l-4 border-l-[#D4AF37]">
                         <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Total de Registros</p>
-                        <p id="dashTotalCli" class="text-4xl font-black text-[#0B192C] mt-2">0</p>
+                        <p id="dashTotalCli" class="text-4xl font-black text-white mt-2">0</p>
                     </div>
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 border-l-4 border-l-emerald-600">
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] border-l-4 border-l-emerald-500">
                         <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Quitados / Pagantes</p>
-                        <p id="dashQuitados" class="text-4xl font-black text-emerald-600 mt-2">0</p>
+                        <p id="dashQuitados" class="text-4xl font-black text-emerald-400 mt-2">0</p>
                     </div>
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 border-l-4 border-l-amber-500">
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] border-l-4 border-l-amber-500">
                         <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Inadimplentes / Outros</p>
-                        <p id="dashInadimplentes" class="text-4xl font-black text-amber-500 mt-2">0</p>
+                        <p id="dashInadimplentes" class="text-4xl font-black text-amber-400 mt-2">0</p>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-                    <table class="min-w-full divide-y divide-slate-100">
-                        <thead class="bg-slate-50/70">
+                <div class="bg-[#0B192C] rounded-2xl shadow-sm border border-[#1E3859] overflow-hidden">
+                    <table class="min-w-full divide-y divide-[#1E3859]">
+                        <thead class="bg-[#112238]">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Empresa</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Tel.</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Pc</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Anuidade</th>
-                                <th class="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Ações</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Empresa</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Tel.</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Valor Pc</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Anuidade</th>
+                                <th class="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Ações</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaClientes" class="bg-white divide-y divide-slate-100"></tbody>
+                        <tbody id="tabelaClientes" class="bg-[#0B192C] divide-y divide-[#1E3859]"></tbody>
                     </table>
                 </div>
             </div>
@@ -1373,14 +1507,14 @@
             <div id="aba-rpi" class="aba-conteudo hidden">
                 <div class="flex justify-between items-center mb-10">
                     <div>
-                        <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Monitoramento INPI (RPI)</h2>
-                        <p class="text-slate-500 mt-1">Filtre os processos por fase clicando nos cartões abaixo.</p>
+                        <h2 class="text-3xl font-black text-white tracking-tight">Monitoramento INPI (RPI)</h2>
+                        <p class="text-slate-400 mt-1">Filtre os processos por fase clicando nos cartões abaixo.</p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="text" id="buscaRPI" onkeyup="filtrarRPI('TODOS')" placeholder="🔍 Pesquisar processo ou marca..." class="px-4 py-2.5 border border-slate-200 bg-slate-50/50 rounded-xl text-sm focus:outline-none focus:border-[#0B192C] focus:bg-white w-64 shadow-sm">
-                        <button onclick="gerarRelatorioRPI()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-sm shadow-sm transition-all">Relatório</button>
+                        <input type="text" id="buscaRPI" onkeyup="filtrarRPI('TODOS')" placeholder="🔍 Pesquisar processo ou marca..." class="px-4 py-2.5 border border-[#1E3859] bg-[#0B192C] text-white rounded-xl text-sm focus:outline-none focus:border-[#D4AF37] w-64 shadow-sm">
+                        <button onclick="gerarRelatorioRPI()" class="px-4 py-2.5 bg-[#112238] hover:bg-[#1E3859] text-white rounded-xl font-bold text-sm shadow-sm border border-[#1E3859] transition-all">Relatório</button>
                         <input type="file" id="upRpi" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'rpi')" />
-                        <label for="upRpi" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37]/40 rounded-xl font-bold shadow-md text-sm transition-all">
+                        <label for="upRpi" class="cursor-pointer px-5 py-2.5 bg-[#D4AF37] hover:bg-[#c29d30] text-[#070F18] rounded-xl font-bold shadow-md text-sm transition-all">
                             <span id="upRpiText">Importar Excel</span>
                         </label>
                     </div>
@@ -1388,16 +1522,16 @@
 
                 <div id="dashRpiContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"></div>
 
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-                    <table class="min-w-full divide-y divide-slate-100">
-                        <thead class="bg-slate-50/70">
+                <div class="bg-[#0B192C] rounded-2xl shadow-sm border border-[#1E3859] overflow-hidden">
+                    <table class="min-w-full divide-y divide-[#1E3859]">
+                        <thead class="bg-[#112238]">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Processo</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Fase</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Processo</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Fase</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaRPI" class="bg-white divide-y divide-slate-100"></tbody>
+                        <tbody id="tabelaRPI" class="bg-[#0B192C] divide-y divide-[#1E3859]"></tbody>
                     </table>
                 </div>
             </div>
@@ -1406,30 +1540,30 @@
             <div id="aba-gru" class="aba-conteudo hidden">
                 <div class="flex justify-between items-center mb-10">
                     <div>
-                        <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Gestão de Guias GRU</h2>
-                        <p class="text-slate-500 mt-1">Controle de pagamentos, vencimentos e anotações de situação.</p>
+                        <h2 class="text-3xl font-black text-white tracking-tight">Gestão de Guias GRU</h2>
+                        <p class="text-slate-400 mt-1">Controle de pagamentos, vencimentos e anotações de situação.</p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="text" id="buscaGRU" onkeyup="filtrarGRU()" placeholder="🔍 Pesquisar cliente, marca ou anotação..." class="px-4 py-2.5 border border-slate-200 bg-slate-50/50 rounded-xl text-sm focus:outline-none focus:border-[#0B192C] focus:bg-white w-64 shadow-sm">
-                        <button onclick="gerarRelatorioGRU()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-sm shadow-sm transition-all">Relatório</button>
+                        <input type="text" id="buscaGRU" onkeyup="filtrarGRU()" placeholder="🔍 Pesquisar cliente, marca ou anotação..." class="px-4 py-2.5 border border-[#1E3859] bg-[#0B192C] text-white rounded-xl text-sm focus:outline-none focus:border-[#D4AF37] w-64 shadow-sm">
+                        <button onclick="gerarRelatorioGRU()" class="px-4 py-2.5 bg-[#112238] hover:bg-[#1E3859] text-white rounded-xl font-bold text-sm shadow-sm border border-[#1E3859] transition-all">Relatório</button>
                         <input type="file" id="upGru" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'gru')" />
-                        <label for="upGru" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-[#D4AF37] rounded-xl font-bold shadow-md text-sm border border-[#D4AF37]/30 transition-all">
+                        <label for="upGru" class="cursor-pointer px-5 py-2.5 bg-[#D4AF37] hover:bg-[#c29d30] text-[#070F18] rounded-xl font-bold shadow-md text-sm transition-all">
                             <span id="upGruText">Importar Excel</span>
                         </label>
                     </div>
                 </div>
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-                    <table class="min-w-full divide-y divide-slate-100">
-                        <thead class="bg-slate-50/70">
+                <div class="bg-[#0B192C] rounded-2xl shadow-sm border border-[#1E3859] overflow-hidden">
+                    <table class="min-w-full divide-y divide-[#1E3859]">
+                        <thead class="bg-[#112238]">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Vencimento</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Anotações / Situação</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Vencimento</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Anotações / Situação</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaGRU" class="bg-white divide-y divide-slate-100"></tbody>
+                        <tbody id="tabelaGRU" class="bg-[#0B192C] divide-y divide-[#1E3859]"></tbody>
                     </table>
                 </div>
             </div>
@@ -1438,30 +1572,30 @@
             <div id="aba-mensal" class="aba-conteudo hidden">
                 <div class="flex justify-between items-center mb-10">
                     <div>
-                        <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Base Administrativo</h2>
-                        <p class="text-slate-500 mt-1">Gestão de contratos e relatórios financeiros administrativos.</p>
+                        <h2 class="text-3xl font-black text-white tracking-tight">Base Administrativo</h2>
+                        <p class="text-slate-400 mt-1">Gestão de contratos e relatórios financeiros administrativos.</p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="text" id="buscaMensal" onkeyup="filtrarMensal()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2.5 border border-slate-200 bg-slate-50/50 rounded-xl text-sm focus:outline-none focus:border-[#0B192C] focus:bg-white w-64 shadow-sm">
-                        <button onclick="gerarRelatorioMensal()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-sm shadow-sm transition-all">Relatório</button>
+                        <input type="text" id="buscaMensal" onkeyup="filtrarMensal()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2.5 border border-[#1E3859] bg-[#0B192C] text-white rounded-xl text-sm focus:outline-none focus:border-[#D4AF37] w-64 shadow-sm">
+                        <button onclick="gerarRelatorioMensal()" class="px-4 py-2.5 bg-[#112238] hover:bg-[#1E3859] text-white rounded-xl font-bold text-sm shadow-sm border border-[#1E3859] transition-all">Relatório</button>
                         <input type="file" id="upMensal" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'mensal')" />
-                        <label for="upMensal" class="cursor-pointer px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md text-sm transition-all">
+                        <label for="upMensal" class="cursor-pointer px-5 py-2.5 bg-[#D4AF37] hover:bg-[#c29d30] text-[#070F18] rounded-xl font-bold shadow-md text-sm transition-all">
                             <span id="upMensalText">Importar Excel</span>
                         </label>
                     </div>
                 </div>
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-                    <table class="min-w-full divide-y divide-slate-100">
-                        <thead class="bg-slate-50/70">
+                <div class="bg-[#0B192C] rounded-2xl shadow-sm border border-[#1E3859] overflow-hidden">
+                    <table class="min-w-full divide-y divide-[#1E3859]">
+                        <thead class="bg-[#112238]">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Marca</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Valor</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Marca</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Data</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Valor</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaMensal" class="bg-white divide-y divide-slate-100"></tbody>
+                        <tbody id="tabelaMensal" class="bg-[#0B192C] divide-y divide-[#1E3859]"></tbody>
                     </table>
                 </div>
             </div>
