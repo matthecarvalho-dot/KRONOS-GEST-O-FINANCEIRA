@@ -113,7 +113,15 @@
             }
 
             try {
+                // Cria o usuário no Authentication
                 await createUserWithEmailAndPassword(auth, email, senha);
+                
+                // Salva o registro no Firestore para o Admin visualizar os acessos criados
+                await addDoc(collection(db, "usuarios_cadastrados"), {
+                    email: email,
+                    criado_em: new Date().toLocaleDateString('pt-BR')
+                });
+
                 sucessoMsg.innerText = "Conta criada com sucesso! Faça login.";
                 setTimeout(() => mostrarPainelLogin('entrar'), 2000);
             } catch (error) {
@@ -408,13 +416,13 @@
             } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
-        // --- GESTÃO DE USUÁRIOS (ADMIN) ---
+        // --- GESTÃO DE USUÁRIOS (ADMIN) COM LISTAGEM DE ACESSOS CRIADOS ---
         window.carregarUsuariosAdmin = async function() {
             const container = document.getElementById('listaUsuariosAdmin');
             container.innerHTML = `
-                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                    <h3 class="text-lg font-bold text-[#0B192C]">Painel de Controle do Administrador Único</h3>
-                    <p class="text-slate-500 mt-1 text-sm">Você está logado como administrador principal com privilégios totais sobre o sistema.</p>
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
+                    <h3 class="text-lg font-bold text-[#0B192C]">Painel de Controle do Administrador</h3>
+                    <p class="text-slate-500 mt-1 text-sm">Você está logado como administrador principal com privilégios totais.</p>
                     <div class="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-4">
                         <div class="p-3 bg-amber-100 rounded-full">
                             <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
@@ -425,7 +433,50 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="p-6 border-b border-slate-200">
+                        <h4 class="font-bold text-[#0B192C]">Usuários / Acessos Criados no Sistema</h4>
+                        <p class="text-xs text-slate-500 mt-0.5">Lista de contas registradas por novos usuários.</p>
+                    </div>
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">E-mail do Usuário</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Data de Cadastro</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Perfil</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaUsuariosCadastrados" class="bg-white divide-y divide-slate-100">
+                            <tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Carregando acessos...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             `;
+
+            try {
+                const querySnapshot = await getDocs(collection(db, "usuarios_cadastrados"));
+                const tbody = document.getElementById('tabelaUsuariosCadastrados');
+                tbody.innerHTML = '';
+
+                if (querySnapshot.empty) {
+                    tbody.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Nenhum usuário cadastrado além do administrador.</td></tr>`;
+                    return;
+                }
+
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.email || ''}</td>
+                            <td class="px-6 py-4 text-sm text-slate-500">${data.criado_em || '-'}</td>
+                            <td class="px-6 py-4 text-sm"><span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-full">USUÁRIO</span></td>
+                        </tr>
+                    `;
+                });
+            } catch (err) {
+                console.error(err);
+            }
         }
 
         // --- IMPORTADOR UNIVERSAL ---
@@ -876,12 +927,6 @@
 
             <!-- ABA EXCLUSIVA ADMIN: GESTÃO DE USUÁRIOS -->
             <div id="aba-admin" class="aba-conteudo hidden">
-                <div class="flex justify-between items-center mb-10">
-                    <div>
-                        <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Painel do Administrador</h2>
-                        <p class="text-slate-500 mt-1">Controle restrito e central de acesso do sistema.</p>
-                    </div>
-                </div>
                 <div id="listaUsuariosAdmin"></div>
             </div>
 
