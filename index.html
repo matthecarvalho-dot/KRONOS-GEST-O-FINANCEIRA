@@ -11,7 +11,7 @@
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, getDocs, query, where, addDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, query, where, addDoc, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, setPersistence, browserLocalPersistence, browserSessionPersistence, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
         // SUAS CHAVES REAIS DO FIREBASE
@@ -35,16 +35,33 @@
         let cicloAtual = 5;
         let rpiCache = [];
 
-        // --- CONTROLE DE AUTENTICAÇÃO E SEGURANÇA ---
-        onAuthStateChanged(auth, (user) => {
+        // --- CONTROLE DE AUTENTICAÇÃO E SEGURANÇA COM VERIFICAÇÃO DE BLOQUEIO ---
+        onAuthStateChanged(auth, async (user) => {
             const telaLogin = document.getElementById('tela-login');
             const appContainer = document.getElementById('app-container');
 
             if (user) {
+                const userEmail = (user.email || "").toLowerCase().trim();
+                
+                // Se não for admin, verifica se está bloqueado no Firestore
+                if (userEmail !== EMAIL_ADMIN) {
+                    try {
+                        const q = query(collection(db, "usuarios_cadastrados"), where("email", "==", userEmail));
+                        const snap = await getDocs(q);
+                        if (!snap.empty) {
+                            const dadosUsuario = snap.docs[0].data();
+                            if (dadosUsuario.status === 'bloqueado') {
+                                alert("Seu acesso foi revogado pelo administrador.");
+                                await signOut(auth);
+                                return;
+                            }
+                        }
+                    } catch (e) { console.error(e); }
+                }
+
                 telaLogin.classList.add('hidden');
                 appContainer.classList.remove('hidden');
                 
-                const userEmail = (user.email || "").toLowerCase().trim();
                 const badgeRole = document.getElementById('badge-role');
                 const menuAdmin = document.getElementById('menu-admin');
                 
@@ -114,6 +131,8 @@
                 await createUserWithEmailAndPassword(auth, email, senha);
                 await addDoc(collection(db, "usuarios_cadastrados"), {
                     email: email,
+                    nome: email.split('@')[0],
+                    status: 'ativo',
                     criado_em: new Date().toLocaleDateString('pt-BR')
                 });
 
@@ -179,6 +198,7 @@
         }
 
         // --- 1. MÓDULO COBRANÇAS ---
+        let cacheCobrancas = [];
         window.carregarCobrancas = async function(dia) {
             cicloAtual = dia;
             document.getElementById('btnDia5').className = dia === 5 ? 'px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow' : 'px-4 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-semibold hover:bg-slate-50';
@@ -190,7 +210,7 @@
             try {
                 const q = query(collection(db, "cobrancas"), where("dia_vencimento", "==", dia));
                 const querySnapshot = await getDocs(q);
-                tabela.innerHTML = '';
+                cacheCobrancas = [];
                 let totalGeral = 0, totalPago = 0, count = 0;
 
                 if (querySnapshot.empty) {
@@ -201,32 +221,65 @@
 
                 querySnapshot.forEach((docSnap) => {
                     const data = docSnap.data();
-                    const docId = docSnap.id;
+                    cacheCobrancas.push({ id: docSnap.id, ...data });
                     count++; 
                     totalGeral += Number(data.valor_total || 0); 
                     totalPago += Number(data.valor_pago || 0);
-
-                    const badge = data.status_pagamento === 'pago' 
-                        ? '<span class="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded">PAGO</span>' 
-                        : '<span class="px-2 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded">PENDENTE</span>';
-                    
-                    tabela.innerHTML += `
-                        <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${String(data.cliente_id || '').substring(0, 20)}</td>
-                            <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
-                            <td class="px-6 py-4 text-sm text-slate-500">Dia ${data.dia_vencimento}</td>
-                            <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor_total || 0).toFixed(2)}</td>
-                            <td class="px-6 py-4 text-sm text-emerald-600 font-bold">R$ ${Number(data.valor_pago || 0).toFixed(2)}</td>
-                            <td class="px-6 py-4 text-sm text-slate-600 text-center font-medium">${data.parcelas_pagas || 0} / ${data.quantidade_parcelas || 1}</td>
-                            <td class="px-6 py-4 text-sm flex items-center gap-3">
-                                ${badge}
-                                <button onclick="editarParcelas('${docId}', ${data.parcelas_pagas || 0}, ${data.quantidade_parcelas || 1}, ${data.valor_total || 0})" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded border border-slate-300 transition-colors">Atualizar</button>
-                            </td>
-                        </tr>
-                    `;
                 });
+
+                renderizarTabelaCobrancas(cacheCobrancas);
                 atualizarCards(totalGeral, totalPago, count);
             } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-500">Erro ao carregar.</td></tr>`; }
+        }
+
+        window.renderizarTabelaCobrancas = function(dados) {
+            const tabela = document.getElementById('tabelaCobrancas');
+            tabela.innerHTML = '';
+            if (dados.length === 0) {
+                tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-slate-400">Nenhum registro encontrado.</td></tr>`;
+                return;
+            }
+            dados.forEach(data => {
+                const badge = data.status_pagamento === 'pago' 
+                    ? '<span class="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded">PAGO</span>' 
+                    : '<span class="px-2 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded">PENDENTE</span>';
+                
+                tabela.innerHTML += `
+                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                        <td class="px-6 py-4 text-sm text-slate-800 font-bold">${String(data.cliente_id || '').substring(0, 20)}</td>
+                        <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-500">Dia ${data.dia_vencimento}</td>
+                        <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor_total || 0).toFixed(2)}</td>
+                        <td class="px-6 py-4 text-sm text-emerald-600 font-bold">R$ ${Number(data.valor_pago || 0).toFixed(2)}</td>
+                        <td class="px-6 py-4 text-sm text-slate-600 text-center font-medium">${data.parcelas_pagas || 0} / ${data.quantidade_parcelas || 1}</td>
+                        <td class="px-6 py-4 text-sm flex items-center gap-3">
+                            ${badge}
+                            <button onclick="editarParcelas('${data.id}', ${data.parcelas_pagas || 0}, ${data.quantidade_parcelas || 1}, ${data.valor_total || 0})" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded border border-slate-300 transition-colors">Atualizar</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        window.filtrarCobrancas = function() {
+            const termo = document.getElementById('buscaCobrancas').value.toLowerCase();
+            const filtrados = cacheCobrancas.filter(item => 
+                String(item.cliente_id || '').toLowerCase().includes(termo) || 
+                String(item.marca || '').toLowerCase().includes(termo)
+            );
+            renderizarTabelaCobrancas(filtrados);
+        }
+
+        window.gerarRelatorioCobrancas = function() {
+            let janela = window.open('', '_blank');
+            janela.document.write(`<html><head><title>Relatório de Faturamento - Ciclo Dia ${cicloAtual}</title><script src="https://cdn.tailwindcss.com"></script></head><body class="p-10 font-sans">`);
+            janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório de Faturamento - Ciclo Dia ${cicloAtual}</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
+            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">Valor Parcela</th><th class="border p-2">Valor Pago</th><th class="border p-2">Status</th></tr>`);
+            cacheCobrancas.forEach(c => {
+                janela.document.write(`<tr><td class="border p-2 font-bold">${c.cliente_id}</td><td class="border p-2">${c.marca}</td><td class="border p-2">R$ ${Number(c.valor_total||0).toFixed(2)}</td><td class="border p-2 text-emerald-600 font-bold">R$ ${Number(c.valor_pago||0).toFixed(2)}</td><td class="border p-2 uppercase font-bold">${c.status_pagamento}</td></tr>`);
+            });
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#0B192C] text-white rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.close();
         }
 
         window.editarParcelas = async function(docId, parcelasAtuais, totalParcelas, valorParcelaTotal) {
@@ -255,12 +308,13 @@
         }
 
         // --- MÓDULO CLIENTES ---
+        let cacheClientes = [];
         window.carregarClientes = async function() {
             const tabela = document.getElementById('tabelaClientes');
             tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Carregando clientes...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "clientes"));
-                tabela.innerHTML = '';
+                cacheClientes = [];
                 let totalCli = 0, assinadoCount = 0, pendenteCount = 0;
 
                 if (querySnapshot.empty) {
@@ -272,26 +326,63 @@
                 querySnapshot.forEach((doc) => {
                     totalCli++;
                     const data = doc.data();
+                    cacheClientes.push(data);
                     let docStatus = String(data.documento || '').toUpperCase();
                     if (docStatus.includes('ASSINADO')) assinadoCount++;
                     else pendenteCount++;
-
-                    let badgeDoc = docStatus.includes('ASSINADO') 
-                        ? '<span class="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded">ASSINADO</span>'
-                        : '<span class="px-2 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded">PENDENTE</span>';
-
-                    tabela.innerHTML += `
-                        <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
-                            <td class="px-6 py-4 text-sm text-slate-600 font-medium">${data.marca || ''}</td>
-                            <td class="px-6 py-4 text-sm text-slate-500">${data.cnpj || ''}</td>
-                            <td class="px-6 py-4 text-sm">${badgeDoc}</td>
-                            <td class="px-6 py-4 text-sm text-blue-600 font-semibold">${data.vendedora || ''}</td>
-                        </tr>
-                    `;
                 });
+
+                renderizarTabelaClientes(cacheClientes);
                 atualizarDashboardClientes(totalCli, assinadoCount, pendenteCount);
             } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
+        }
+
+        window.renderizarTabelaClientes = function(dados) {
+            const tabela = document.getElementById('tabelaClientes');
+            tabela.innerHTML = '';
+            if (dados.length === 0) {
+                tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum cliente encontrado.</td></tr>`;
+                return;
+            }
+            dados.forEach(data => {
+                let docStatus = String(data.documento || '').toUpperCase();
+                let badgeDoc = docStatus.includes('ASSINADO') 
+                    ? '<span class="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded">ASSINADO</span>'
+                    : '<span class="px-2 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded">PENDENTE</span>';
+
+                tabela.innerHTML += `
+                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                        <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-600 font-medium">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-500">${data.cnpj || ''}</td>
+                        <td class="px-6 py-4 text-sm">${badgeDoc}</td>
+                        <td class="px-6 py-4 text-sm text-blue-600 font-semibold">${data.vendedora || ''}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        window.filtrarClientes = function() {
+            const termo = document.getElementById('buscaClientes').value.toLowerCase();
+            const filtrados = cacheClientes.filter(item => 
+                String(item.cliente || '').toLowerCase().includes(termo) || 
+                String(item.marca || '').toLowerCase().includes(termo) ||
+                String(item.cnpj || '').toLowerCase().includes(termo) ||
+                String(item.vendedora || '').toLowerCase().includes(termo)
+            );
+            renderizarTabelaClientes(filtrados);
+        }
+
+        window.gerarRelatorioClientes = function() {
+            let janela = window.open('', '_blank');
+            janela.document.write(`<html><head><title>Relatório Geral de Clientes</title><script src="https://cdn.tailwindcss.com"></script></head><body class="p-10 font-sans">`);
+            janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório Geral de Clientes</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
+            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">CNPJ</th><th class="border p-2">Documento</th><th class="border p-2">Vendedora</th></tr>`);
+            cacheClientes.forEach(c => {
+                janela.document.write(`<tr><td class="border p-2 font-bold">${c.cliente}</td><td class="border p-2">${c.marca}</td><td class="border p-2">${c.cnpj}</td><td class="border p-2 uppercase font-bold">${c.documento}</td><td class="border p-2">${c.vendedora}</td></tr>`);
+            });
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#0B192C] text-white rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.close();
         }
 
         function atualizarDashboardClientes(total, assinados, pendentes) {
@@ -346,9 +437,18 @@
         }
 
         window.filtrarRPI = function(termoFase) {
+            const busca = document.getElementById('buscaRPI') ? document.getElementById('buscaRPI').value.toLowerCase() : '';
             const tabela = document.getElementById('tabelaRPI');
             tabela.innerHTML = '';
             let filtrados = termoFase === 'TODOS' ? rpiCache : rpiCache.filter(item => item.fase.includes(termoFase));
+            
+            if (busca) {
+                filtrados = filtrados.filter(item => 
+                    String(item.processo || '').toLowerCase().includes(busca) || 
+                    String(item.marca || '').toLowerCase().includes(busca)
+                );
+            }
+
             if (filtrados.length === 0) {
                 tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Nenhum processo encontrado.</td></tr>`;
                 return;
@@ -364,84 +464,161 @@
             });
         }
 
+        window.gerarRelatorioRPI = function() {
+            let janela = window.open('', '_blank');
+            janela.document.write(`<html><head><title>Relatório de Processos RPI</title><script src="https://cdn.tailwindcss.com"></script></head><body class="p-10 font-sans">`);
+            janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório de Processos RPI (INPI)</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
+            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Processo</th><th class="border p-2">Marca</th><th class="border p-2">Fase</th></tr>`);
+            rpiCache.forEach(c => {
+                janela.document.write(`<tr><td class="border p-2 font-mono">${c.processo}</td><td class="border p-2 font-bold">${c.marca}</td><td class="border p-2 uppercase">${c.fase}</td></tr>`);
+            });
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#0B192C] text-white rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.close();
+        }
+
         // --- MÓDULO GRU ---
+        let cacheGRU = [];
         window.carregarGRU = async function() {
             const tabela = document.getElementById('tabelaGRU');
             tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Carregando...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "gru"));
+                cacheGRU = [];
                 tabela.innerHTML = '';
                 if (querySnapshot.empty) { tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Nenhuma GRU cadastrada.</td></tr>`; return; }
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
-                    tabela.innerHTML += `
-                        <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
-                            <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
-                            <td class="px-6 py-4 text-sm text-slate-500">${data.vencimento || ''}</td>
-                            <td class="px-6 py-4 text-sm font-bold text-emerald-600">R$ ${Number(data.valor || 0).toFixed(2)}</td>
-                        </tr>
-                    `;
+                    cacheGRU.push(data);
                 });
+                renderizarTabelaGRU(cacheGRU);
             } catch (error) { tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
+        window.renderizarTabelaGRU = function(dados) {
+            const tabela = document.getElementById('tabelaGRU');
+            tabela.innerHTML = '';
+            if (dados.length === 0) {
+                tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Nenhum registro encontrado.</td></tr>`;
+                return;
+            }
+            dados.forEach(data => {
+                tabela.innerHTML += `
+                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                        <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-500">${data.vencimento || ''}</td>
+                        <td class="px-6 py-4 text-sm font-bold text-emerald-600">R$ ${Number(data.valor || 0).toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        window.filtrarGRU = function() {
+            const termo = document.getElementById('buscaGRU').value.toLowerCase();
+            const filtrados = cacheGRU.filter(item => 
+                String(item.cliente || '').toLowerCase().includes(termo) || 
+                String(item.marca || '').toLowerCase().includes(termo)
+            );
+            renderizarTabelaGRU(filtrados);
+        }
+
+        window.gerarRelatorioGRU = function() {
+            let janela = window.open('', '_blank');
+            janela.document.write(`<html><head><title>Relatório de Guias GRU</title><script src="https://cdn.tailwindcss.com"></script></head><body class="p-10 font-sans">`);
+            janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório de Guias GRU</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
+            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">Vencimento</th><th class="border p-2">Valor</th></tr>`);
+            cacheGRU.forEach(c => {
+                janela.document.write(`<tr><td class="border p-2 font-bold">${c.cliente}</td><td class="border p-2">${c.marca}</td><td class="border p-2">${c.vencimento}</td><td class="border p-2 text-emerald-600 font-bold">R$ ${Number(c.valor||0).toFixed(2)}</td></tr>`);
+            });
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#0B192C] text-white rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.close();
+        }
+
         // --- MÓDULO MENSAL ---
+        let cacheMensal = [];
         window.carregarMensal = async function() {
             const tabela = document.getElementById('tabelaMensal');
             tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Carregando...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "mensal"));
+                cacheMensal = [];
                 tabela.innerHTML = '';
                 if (querySnapshot.empty) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum registro.</td></tr>`; return; }
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
-                    tabela.innerHTML += `
-                        <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
-                            <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
-                            <td class="px-6 py-4 text-sm text-slate-500">${data.data_pagamento || ''}</td>
-                            <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor || 0).toFixed(2)}</td>
-                            <td class="px-6 py-4 text-sm font-bold text-emerald-600">${data.status || 'PAGO'}</td>
-                        </tr>
-                    `;
+                    cacheMensal.push(data);
                 });
+                renderizarTabelaMensal(cacheMensal);
             } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
-        // --- GESTÃO DE USUÁRIOS (ADMIN) ---
+        window.renderizarTabelaMensal = function(dados) {
+            const tabela = document.getElementById('tabelaMensal');
+            tabela.innerHTML = '';
+            if (dados.length === 0) {
+                tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum registro encontrado.</td></tr>`;
+                return;
+            }
+            dados.forEach(data => {
+                tabela.innerHTML += `
+                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                        <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-500">${data.data_pagamento || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-800 font-semibold">R$ ${Number(data.valor || 0).toFixed(2)}</td>
+                        <td class="px-6 py-4 text-sm font-bold text-emerald-600">${data.status || 'PAGO'}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        window.filtrarMensal = function() {
+            const termo = document.getElementById('buscaMensal').value.toLowerCase();
+            const filtrados = cacheMensal.filter(item => 
+                String(item.cliente || '').toLowerCase().includes(termo) || 
+                String(item.marca || '').toLowerCase().includes(termo)
+            );
+            renderizarTabelaMensal(filtrados);
+        }
+
+        window.gerarRelatorioMensal = function() {
+            let janela = window.open('', '_blank');
+            janela.document.write(`<html><head><title>Relatório Financeiro / Mensal</title><script src="https://cdn.tailwindcss.com"></script></head><body class="p-10 font-sans">`);
+            janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório Financeiro / Mensal</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
+            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">Data</th><th class="border p-2">Valor</th><th class="border p-2">Status</th></tr>`);
+            cacheMensal.forEach(c => {
+                janela.document.write(`<tr><td class="border p-2 font-bold">${c.cliente}</td><td class="border p-2">${c.marca}</td><td class="border p-2">${c.data_pagamento}</td><td class="border p-2 text-emerald-600 font-bold">R$ ${Number(c.valor||0).toFixed(2)}</td><td class="border p-2 uppercase font-bold">${c.status}</td></tr>`);
+            });
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#0B192C] text-white rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.close();
+        }
+
+        // --- GESTÃO DE USUÁRIOS (ADMIN) COM BLOQUEIO, EDIÇÃO DE NOME E EXCLUSÃO ---
         window.carregarUsuariosAdmin = async function() {
             const container = document.getElementById('listaUsuariosAdmin');
             container.innerHTML = `
                 <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
                     <h3 class="text-lg font-bold text-[#0B192C]">Painel de Controle do Administrador</h3>
-                    <p class="text-slate-500 mt-1 text-sm">Você está logado como administrador principal com privilégios totais.</p>
-                    <div class="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-4">
-                        <div class="p-3 bg-amber-100 rounded-full">
-                            <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
-                        </div>
-                        <div>
-                            <p class="text-xs font-bold text-slate-400 uppercase">E-mail Protegido (Admin):</p>
-                            <p class="text-sm font-black text-[#0B192C] mt-1">${auth.currentUser ? auth.currentUser.email : 'Não autenticado'}</p>
-                        </div>
-                    </div>
+                    <p class="text-slate-500 mt-1 text-sm">Gerencie quem tem permissão para acessar o sistema ou altere nomes e perfis.</p>
                 </div>
 
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                     <div class="p-6 border-b border-slate-200">
-                        <h4 class="font-bold text-[#0B192C]">Usuários / Acessos Criados no Sistema</h4>
-                        <p class="text-xs text-slate-500 mt-0.5">Lista de contas registradas por novos usuários.</p>
+                        <h4 class="font-bold text-[#0B192C]">Controle de Acessos</h4>
+                        <p class="text-xs text-slate-500 mt-0.5">Lista completa de contas cadastradas.</p>
                     </div>
                     <table class="min-w-full divide-y divide-slate-200">
                         <thead class="bg-slate-50">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">E-mail do Usuário</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Data de Cadastro</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Perfil</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Nome / Identificação</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">E-mail</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Data</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Status</th>
+                                <th class="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase">Ações</th>
                             </tr>
                         </thead>
                         <tbody id="tabelaUsuariosCadastrados" class="bg-white divide-y divide-slate-100">
-                            <tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Carregando acessos...</td></tr>
+                            <tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Carregando acessos...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -453,24 +630,64 @@
                 tbody.innerHTML = '';
 
                 if (querySnapshot.empty) {
-                    tbody.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">Nenhum usuário cadastrado além do administrador.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum usuário cadastrado.</td></tr>`;
                     return;
                 }
 
                 querySnapshot.forEach((docSnap) => {
                     const data = docSnap.data();
+                    const docId = docSnap.id;
+                    const status = data.status || 'ativo';
+                    const badgeStatus = status === 'ativo' 
+                        ? '<span class="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded">ATIVO</span>' 
+                        : '<span class="px-2 py-1 text-xs font-bold bg-rose-100 text-rose-800 rounded">BLOQUEADO</span>';
+
                     tbody.innerHTML += `
                         <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.email || ''}</td>
+                            <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.nome || '-'}</td>
+                            <td class="px-6 py-4 text-sm text-slate-600">${data.email || ''}</td>
                             <td class="px-6 py-4 text-sm text-slate-500">${data.criado_em || '-'}</td>
-                            <td class="px-6 py-4 text-sm"><span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-full">USUÁRIO</span></td>
+                            <td class="px-6 py-4 text-sm">${badgeStatus}</td>
+                            <td class="px-6 py-4 text-sm text-right space-x-2">
+                                <button onclick="editarNomeUsuario('${docId}', '${data.nome || ''}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded border">Editar Nome</button>
+                                <button onclick="alternarStatusUsuario('${docId}', '${status}')" class="px-2.5 py-1 ${status === 'ativo' ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'} text-xs font-semibold rounded">${status === 'ativo' ? 'Bloquear' : 'Ativar'}</button>
+                                <button onclick="excluirUsuarioAdmin('${docId}')" class="px-2.5 py-1 bg-rose-100 text-rose-700 hover:bg-rose-200 text-xs font-semibold rounded">Excluir</button>
+                            </td>
                         </tr>
                     `;
                 });
             } catch (err) { console.error(err); }
         }
 
-        // --- IMPORTADOR UNIVERSAL COM UPSERT INTELIGENTE (EVITA DUPLICATAS E ATUALIZA) ---
+        window.editarNomeUsuario = async function(docId, nomeAtual) {
+            let novoNome = prompt("Digite o novo nome / identificação do usuário:", nomeAtual);
+            if (novoNome === null || novoNome.trim() === "") return;
+            try {
+                await updateDoc(doc(db, "usuarios_cadastrados", docId), { nome: novoNome.trim() });
+                alert("Nome atualizado com sucesso!");
+                carregarUsuariosAdmin();
+            } catch (e) { alert("Erro ao atualizar."); }
+        }
+
+        window.alternarStatusUsuario = async function(docId, statusAtual) {
+            let novoStatus = statusAtual === 'ativo' ? 'bloqueado' : 'ativo';
+            try {
+                await updateDoc(doc(db, "usuarios_cadastrados", docId), { status: novoStatus });
+                alert(`Status alterado para ${novoStatus.toUpperCase()} com sucesso!`);
+                carregarUsuariosAdmin();
+            } catch (e) { alert("Erro ao alterar status."); }
+        }
+
+        window.excluirUsuarioAdmin = async function(docId) {
+            if (!confirm("Tem certeza que deseja remover este acesso do painel?")) return;
+            try {
+                await deleteDoc(doc(db, "usuarios_cadastrados", docId));
+                alert("Registro removido com sucesso!");
+                carregarUsuariosAdmin();
+            } catch (e) { alert("Erro ao excluir."); }
+        }
+
+        // --- IMPORTADOR UNIVERSAL COM UPSERT INTELIGENTE ---
         window.processarPlanilha = function(event, modulo) {
             const file = event.target.files[0];
             if (!file) return;
@@ -484,7 +701,6 @@
                 const workbook = XLSX.read(data, {type: 'array'});
                 let salvos = 0;
 
-                // 1. COBRANÇAS
                 if (modulo === 'cobrancas') {
                     const snapshot = await getDocs(collection(db, "cobrancas"));
                     const mapCobrancas = new Map();
@@ -537,7 +753,6 @@
                     carregarCobrancas(cicloAtual);
                 }
 
-                // 2. CLIENTES
                 if (modulo === 'clientes') {
                     const aba = workbook.Sheets['BASE DE MARCAS '] || workbook.Sheets[workbook.SheetNames[0]];
                     if (aba) {
@@ -578,7 +793,6 @@
                     carregarClientes();
                 }
 
-                // 3. RPI
                 if (modulo === 'rpi') {
                     const snapshot = await getDocs(collection(db, "rpi_marcas"));
                     const mapRpi = new Map();
@@ -622,7 +836,6 @@
                     carregarRPI();
                 }
 
-                // 4. GRU
                 if (modulo === 'gru') {
                     const snapshot = await getDocs(collection(db, "gru"));
                     const mapGru = new Map();
@@ -658,7 +871,6 @@
                     carregarGRU();
                 }
 
-                // 5. MENSAL
                 if (modulo === 'mensal') {
                     const snapshot = await getDocs(collection(db, "mensal"));
                     const mapMensal = new Map();
@@ -851,15 +1063,18 @@
                     </div>
                 </div>
 
-                <div class="bg-white p-6 rounded-t-xl shadow-sm border border-slate-200 border-b-0 flex justify-between items-center">
+                <div class="bg-white p-6 rounded-t-xl shadow-sm border border-slate-200 border-b-0 flex flex-wrap gap-4 justify-between items-center">
                     <div class="flex gap-2">
                         <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow">Ciclo Dia 5</button>
                         <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-semibold hover:bg-slate-50">Ciclo Dia 20</button>
                     </div>
-                    <div>
+                    <!-- BARRA DE PESQUISA E RELATÓRIO -->
+                    <div class="flex flex-wrap items-center gap-3">
+                        <input type="text" id="buscaCobrancas" onkeyup="filtrarCobrancas()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
+                        <button onclick="gerarRelatorioCobrancas()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md font-semibold text-sm shadow">Gerar Relatório</button>
                         <input type="file" id="upCobrancas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'cobrancas')" />
-                        <label for="upCobrancas" class="cursor-pointer px-4 py-2 bg-[#0B192C] hover:bg-[#1E3E62] text-white rounded-md font-semibold shadow-md flex items-center gap-2">
-                            <span id="upCobrancasText">Importar Dados (Parcelas)</span>
+                        <label for="upCobrancas" class="cursor-pointer px-4 py-2 bg-[#0B192C] hover:bg-[#1E3E62] text-white rounded-md font-semibold shadow-md flex items-center gap-2 text-sm">
+                            <span id="upCobrancasText">Importar Dados</span>
                         </label>
                     </div>
                 </div>
@@ -889,10 +1104,12 @@
                         <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Base Geral de Clientes</h2>
                         <p class="text-slate-500 mt-1">Gestão de contatos, contratos e vendedoras.</p>
                     </div>
-                    <div>
+                    <div class="flex items-center gap-3">
+                        <input type="text" id="buscaClientes" onkeyup="filtrarClientes()" placeholder="🔍 Pesquisar cliente, marca, CNPJ..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
+                        <button onclick="gerarRelatorioClientes()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md font-semibold text-sm shadow">Gerar Relatório</button>
                         <input type="file" id="upClientes" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'clientes')" />
-                        <label for="upClientes" class="cursor-pointer px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold shadow-md">
-                            <span id="upClientesText">Importar CLIENTES.xlsx</span>
+                        <label for="upClientes" class="cursor-pointer px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold shadow-md text-sm">
+                            <span id="upClientesText">Importar CLIENTES</span>
                         </label>
                     </div>
                 </div>
@@ -935,10 +1152,12 @@
                         <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Monitoramento INPI (RPI)</h2>
                         <p class="text-slate-500 mt-1">Filtre os processos por fase clicando nos botões abaixo.</p>
                     </div>
-                    <div>
+                    <div class="flex items-center gap-3">
+                        <input type="text" id="buscaRPI" onkeyup="filtrarRPI('TODOS')" placeholder="🔍 Pesquisar processo ou marca..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
+                        <button onclick="gerarRelatorioRPI()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md font-semibold text-sm shadow">Gerar Relatório</button>
                         <input type="file" id="upRpi" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'rpi')" />
-                        <label for="upRpi" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow-md">
-                            <span id="upRpiText">Importar REVISTAS RPI</span>
+                        <label for="upRpi" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37] rounded-md font-semibold shadow-md text-sm">
+                            <span id="upRpiText">Importar RPI</span>
                         </label>
                     </div>
                 </div>
@@ -966,10 +1185,12 @@
                         <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Gestão de Guias GRU</h2>
                         <p class="text-slate-500 mt-1">Controle de emissão e vencimentos.</p>
                     </div>
-                    <div>
+                    <div class="flex items-center gap-3">
+                        <input type="text" id="buscaGRU" onkeyup="filtrarGRU()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
+                        <button onclick="gerarRelatorioGRU()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md font-semibold text-sm shadow">Gerar Relatório</button>
                         <input type="file" id="upGru" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'gru')" />
-                        <label for="upGru" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-white rounded-md font-semibold shadow-md">
-                            <span id="upGruText">Importar Planilha da GRU</span>
+                        <label for="upGru" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-white rounded-md font-semibold shadow-md text-sm">
+                            <span id="upGruText">Importar GRU</span>
                         </label>
                     </div>
                 </div>
@@ -995,9 +1216,11 @@
                         <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Fechamento Mensal / ADM</h2>
                         <p class="text-slate-500 mt-1">Gestão de contratos administrativos.</p>
                     </div>
-                    <div>
+                    <div class="flex items-center gap-3">
+                        <input type="text" id="buscaMensal" onkeyup="filtrarMensal()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
+                        <button onclick="gerarRelatorioMensal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md font-semibold text-sm shadow">Gerar Relatório</button>
                         <input type="file" id="upMensal" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'mensal')" />
-                        <label for="upMensal" class="cursor-pointer px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold shadow-md">
+                        <label for="upMensal" class="cursor-pointer px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold shadow-md text-sm">
                             <span id="upMensalText">Importar ADMINISTRATIVO</span>
                         </label>
                     </div>
