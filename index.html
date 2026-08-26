@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kronos - ERP Executive</title>
+    <title>Kronos GS - ERP Executive</title>
     <link rel="icon" type="image/jpeg" href="https://i.imgur.com/NZyhksv.jpeg">
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -12,7 +12,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, getDocs, query, where, addDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, setPersistence, browserLocalPersistence, browserSessionPersistence, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
         // SUAS CHAVES REAIS DO FIREBASE
         const firebaseConfig = {
@@ -29,13 +29,13 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // E-MAIL DE ADMINISTRADOR FIXO DIRETO NO CÓDIGO
+        // E-MAIL DE ADMINISTRADOR FIXO
         const EMAIL_ADMIN = "matthecarvalho@gmail.com";
 
         let cicloAtual = 5;
         let rpiCache = [];
 
-        // --- CONTROLE DE AUTENTICAÇÃO ---
+        // --- CONTROLE DE AUTENTICAÇÃO E PERSISTÊNCIA ---
         onAuthStateChanged(auth, (user) => {
             const telaLogin = document.getElementById('tela-login');
             const appContainer = document.getElementById('app-container');
@@ -44,7 +44,6 @@
                 telaLogin.classList.add('hidden');
                 appContainer.classList.remove('hidden');
                 
-                // Valida se é o administrador único
                 if (user.email === EMAIL_ADMIN) {
                     document.getElementById('menu-admin').classList.remove('hidden');
                 } else {
@@ -55,19 +54,82 @@
             } else {
                 telaLogin.classList.remove('hidden');
                 appContainer.classList.add('hidden');
+                mostrarPainelLogin('entrar');
             }
         });
 
-        window.fazerLogin = function() {
+        // Alternar entre Telas de Login, Cadastro e Redefinição
+        window.mostrarPainelLogin = function(tipo) {
+            document.getElementById('form-entrar').classList.add('hidden');
+            document.getElementById('form-cadastro').classList.add('hidden');
+            document.getElementById('form-redefinir').classList.add('hidden');
+            document.getElementById('loginErro').innerText = "";
+            document.getElementById('loginSucesso').innerText = "";
+
+            if (tipo === 'entrar') document.getElementById('form-entrar').classList.remove('hidden');
+            if (tipo === 'cadastro') document.getElementById('form-cadastro').classList.remove('hidden');
+            if (tipo === 'redefinir') document.getElementById('form-redefinir').classList.remove('hidden');
+        }
+
+        window.fazerLogin = async function() {
             const email = document.getElementById('loginEmail').value;
             const senha = document.getElementById('loginSenha').value;
+            const lembrar = document.getElementById('lembrarAutorizado').checked;
             const erroMsg = document.getElementById('loginErro');
 
-            erroMsg.innerText = "Entrando...";
-            signInWithEmailAndPassword(auth, email, senha)
-                .catch((error) => {
-                    erroMsg.innerText = "Erro: E-mail ou senha incorretos.";
-                });
+            if (!email || !senha) {
+                erroMsg.innerText = "Preencha e-mail e senha.";
+                return;
+            }
+
+            erroMsg.innerText = "Autenticando...";
+            try {
+                // Se NÃO autorizou, usa sessionPersistence (não grava ao fechar o navegador)
+                // Se autorizou, usa localPersistence (mantém salvo)
+                const persistenceType = lembrar ? browserLocalPersistence : browserSessionPersistence;
+                await setPersistence(auth, persistenceType);
+                await signInWithEmailAndPassword(auth, email, senha);
+            } catch (error) {
+                erroMsg.innerText = "Erro: E-mail ou senha incorretos.";
+            }
+        }
+
+        window.fazerCadastro = async function() {
+            const email = document.getElementById('cadEmail').value;
+            const senha = document.getElementById('cadSenha').value;
+            const msg = document.getElementById('loginErro');
+            const sucessoMsg = document.getElementById('loginSucesso');
+
+            if (!email || !senha) {
+                msg.innerText = "Preencha todos os campos.";
+                return;
+            }
+
+            try {
+                await createUserWithEmailAndPassword(auth, email, senha);
+                sucessoMsg.innerText = "Conta criada com sucesso! Faça login.";
+                setTimeout(() => mostrarPainelLogin('entrar'), 2000);
+            } catch (error) {
+                msg.innerText = "Erro ao cadastrar: " + error.message;
+            }
+        }
+
+        window.redefinirSenha = async function() {
+            const email = document.getElementById('redEmail').value;
+            const msg = document.getElementById('loginErro');
+            const sucessoMsg = document.getElementById('loginSucesso');
+
+            if (!email) {
+                msg.innerText = "Informe seu e-mail.";
+                return;
+            }
+
+            try {
+                await sendPasswordResetEmail(auth, email);
+                sucessoMsg.innerText = "E-mail de recuperação enviado com sucesso!";
+            } catch (error) {
+                msg.innerText = "Erro ao enviar e-mail: " + error.message;
+            }
         }
 
         window.fazerLogout = function() {
@@ -328,7 +390,7 @@
             } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
-        // --- GESTÃO DE USUÁRIOS (EXCLUSIVO ADMIN) ---
+        // --- GESTÃO DE USUÁRIOS (ADMIN) ---
         window.carregarUsuariosAdmin = async function() {
             const container = document.getElementById('listaUsuariosAdmin');
             container.innerHTML = `
@@ -477,14 +539,15 @@
 </head>
 <body class="bg-slate-100 min-h-screen flex font-sans">
 
-    <!-- TELA DE LOGIN -->
+    <!-- TELA DE LOGIN / CADASTRO / REDEFINIÇÃO -->
     <div id="tela-login" class="fixed inset-0 bg-[#0B192C] z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-200 text-center">
-            <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos Logo" class="w-16 h-16 rounded-xl object-cover shadow-md border-2 border-[#D4AF37] mx-auto mb-4">
-            <h2 class="text-2xl font-black text-[#0B192C] tracking-wide">KRONOS ERP</h2>
-            <p class="text-slate-400 text-xs uppercase tracking-widest mt-1">Acesso Executivo Restrito</p>
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-200 text-center relative">
+            <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-16 h-16 rounded-xl object-cover shadow-md border-2 border-[#D4AF37] mx-auto mb-4">
+            <h2 class="text-2xl font-black text-[#0B192C] tracking-wide">KRONOS GS</h2>
+            <p class="text-slate-400 text-xs uppercase tracking-widest mt-1">ERP Executive Suite</p>
             
-            <div class="mt-8 space-y-4 text-left">
+            <!-- FORMULÁRIO DE ENTRADA -->
+            <div id="form-entrar" class="mt-6 space-y-4 text-left block">
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase">E-mail</label>
                     <input type="email" id="loginEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="seu-email@empresa.com">
@@ -493,22 +556,70 @@
                     <label class="block text-xs font-bold text-slate-500 uppercase">Senha</label>
                     <input type="password" id="loginSenha" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="••••••••">
                 </div>
+                
+                <!-- CHECKBOX DE AUTORIZAÇÃO DE PERSISTÊNCIA -->
+                <div class="flex items-center gap-2 pt-1">
+                    <input type="checkbox" id="lembrarAutorizado" class="w-4 h-4 text-[#0B192C] rounded border-slate-300 focus:ring-[#0B192C]">
+                    <label for="lembrarAutorizado" class="text-xs text-slate-600 font-medium cursor-pointer">Autorizar gravação do login neste dispositivo</label>
+                </div>
+
                 <button onclick="fazerLogin()" class="w-full py-3.5 bg-[#0B192C] hover:bg-[#1E3E62] text-[#D4AF37] font-bold rounded-lg shadow-md transition-all tracking-wider text-sm border border-[#D4AF37]">
-                    ENTRAR NO SISTEMA
+                    ACESSAR SISTEMA
                 </button>
-                <p id="loginErro" class="text-center text-xs font-semibold text-rose-600 mt-2"></p>
+                
+                <div class="flex justify-between items-center text-xs pt-2">
+                    <button onclick="mostrarPainelLogin('cadastro')" class="text-blue-600 hover:underline font-semibold">Criar Cadastro</button>
+                    <button onclick="mostrarPainelLogin('redefinir')" class="text-slate-500 hover:underline">Esqueci a senha</button>
+                </div>
             </div>
+
+            <!-- FORMULÁRIO DE CADASTRO -->
+            <div id="form-cadastro" class="mt-6 space-y-4 text-left hidden">
+                <h3 class="text-sm font-bold text-[#0B192C] uppercase border-b pb-2">Novo Cadastro</h3>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase">E-mail</label>
+                    <input type="email" id="cadEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="novo@empresa.com">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase">Senha</label>
+                    <input type="password" id="cadSenha" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="••••••••">
+                </div>
+                <button onclick="fazerCadastro()" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-md transition-all tracking-wider text-sm">
+                    CADASTRAR CONTA
+                </button>
+                <div class="text-center pt-2">
+                    <button onclick="mostrarPainelLogin('entrar')" class="text-xs text-slate-600 hover:underline font-semibold">← Voltar para o Login</button>
+                </div>
+            </div>
+
+            <!-- FORMULÁRIO DE REDEFINIÇÃO DE SENHA -->
+            <div id="form-redefinir" class="mt-6 space-y-4 text-left hidden">
+                <h3 class="text-sm font-bold text-[#0B192C] uppercase border-b pb-2">Redefinir Senha</h3>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase">E-mail cadastrado</label>
+                    <input type="email" id="redEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="seu-email@empresa.com">
+                </div>
+                <button onclick="redefinirSenha()" class="w-full py-3.5 bg-[#0B192C] hover:bg-[#1E3E62] text-[#D4AF37] font-bold rounded-lg shadow-md transition-all tracking-wider text-sm border border-[#D4AF37]">
+                    ENVIAR INSTRUÇÕES
+                </button>
+                <div class="text-center pt-2">
+                    <button onclick="mostrarPainelLogin('entrar')" class="text-xs text-slate-600 hover:underline font-semibold">← Voltar para o Login</button>
+                </div>
+            </div>
+
+            <p id="loginErro" class="text-center text-xs font-semibold text-rose-600 mt-4"></p>
+            <p id="loginSucesso" class="text-center text-xs font-semibold text-emerald-600 mt-4"></p>
         </div>
     </div>
 
     <!-- APLICAÇÃO PRINCIPAL -->
     <div id="app-container" class="hidden flex w-full">
-        <!-- MENU LATERAL -->
+        <!-- MENU LATERAL EXECUTIVO -->
         <aside class="w-72 bg-[#0B192C] text-white min-h-screen flex flex-col fixed shadow-2xl z-10 border-r border-[#1E3E62]">
             <div class="p-6 border-b border-[#1E3E62] flex items-center gap-3">
-                <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos Logo" class="w-12 h-12 rounded-lg object-cover shadow-md border border-[#D4AF37]">
+                <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-12 h-12 rounded-lg object-cover shadow-md border border-[#D4AF37]">
                 <div>
-                    <h1 class="text-xl font-black tracking-widest text-white">KRONOS</h1>
+                    <h1 class="text-xl font-black tracking-widest text-white">KRONOS GS</h1>
                     <p class="text-[9px] text-[#D4AF37] uppercase tracking-[0.2em] font-bold">ERP Executive</p>
                 </div>
             </div>
