@@ -29,7 +29,7 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // E-MAIL DE ADMINISTRADOR FIXO
+        // E-MAIL EXCLUSIVO DO ADMINISTRADOR
         const EMAIL_ADMIN = "matthecarvalho@gmail.com";
 
         let cicloAtual = 5;
@@ -44,10 +44,17 @@
                 telaLogin.classList.add('hidden');
                 appContainer.classList.remove('hidden');
                 
+                const badgeRole = document.getElementById('badge-role');
+                
+                // Controle Rígido: Só o matthecarvalho@gmail.com é Admin
                 if (user.email === EMAIL_ADMIN) {
                     document.getElementById('menu-admin').classList.remove('hidden');
+                    badgeRole.innerText = "⭐ Perfil: ADMINISTRADOR";
+                    badgeRole.className = "text-xs font-bold text-[#D4AF37] mt-1";
                 } else {
                     document.getElementById('menu-admin').classList.add('hidden');
+                    badgeRole.innerText = "👤 Perfil: USUÁRIO";
+                    badgeRole.className = "text-xs font-bold text-emerald-400 mt-1";
                 }
 
                 abrirAba('cobrancas');
@@ -58,7 +65,7 @@
             }
         });
 
-        // Alternar entre Telas de Login, Cadastro e Redefinição
+        // Alternar entre Telas
         window.mostrarPainelLogin = function(tipo) {
             document.getElementById('form-entrar').classList.add('hidden');
             document.getElementById('form-cadastro').classList.add('hidden');
@@ -84,8 +91,7 @@
 
             erroMsg.innerText = "Autenticando...";
             try {
-                // Se NÃO autorizou, usa sessionPersistence (não grava ao fechar o navegador)
-                // Se autorizou, usa localPersistence (mantém salvo)
+                // Se o checkbox estiver marcado, salva o login. Senão, expira ao fechar a aba.
                 const persistenceType = lembrar ? browserLocalPersistence : browserSessionPersistence;
                 await setPersistence(auth, persistenceType);
                 await signInWithEmailAndPassword(auth, email, senha);
@@ -107,10 +113,10 @@
 
             try {
                 await createUserWithEmailAndPassword(auth, email, senha);
-                sucessoMsg.innerText = "Conta criada com sucesso! Faça login.";
+                sucessoMsg.innerText = "Conta de usuário criada! Faça login.";
                 setTimeout(() => mostrarPainelLogin('entrar'), 2000);
             } catch (error) {
-                msg.innerText = "Erro ao cadastrar: " + error.message;
+                msg.innerText = "Erro ao cadastrar: A senha deve ter ao menos 6 caracteres.";
             }
         }
 
@@ -126,9 +132,9 @@
 
             try {
                 await sendPasswordResetEmail(auth, email);
-                sucessoMsg.innerText = "E-mail de recuperação enviado com sucesso!";
+                sucessoMsg.innerText = "E-mail de recuperação enviado!";
             } catch (error) {
-                msg.innerText = "Erro ao enviar e-mail: " + error.message;
+                msg.innerText = "Erro ao enviar e-mail. Verifique se digitou corretamente.";
             }
         }
 
@@ -397,9 +403,14 @@
                 <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                     <h3 class="text-lg font-bold text-[#0B192C]">Painel de Controle do Administrador Único</h3>
                     <p class="text-slate-500 mt-1 text-sm">Você está logado como administrador principal com privilégios totais sobre o sistema.</p>
-                    <div class="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
-                        <p class="text-xs font-bold text-slate-400 uppercase">E-mail do Administrador:</p>
-                        <p class="text-sm font-semibold text-slate-800 mt-1">${auth.currentUser ? auth.currentUser.email : 'Não autenticado'}</p>
+                    <div class="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-4">
+                        <div class="p-3 bg-amber-100 rounded-full">
+                            <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase">E-mail Protegido (Admin):</p>
+                            <p class="text-sm font-black text-[#0B192C] mt-1">${auth.currentUser ? auth.currentUser.email : 'Não autenticado'}</p>
+                        </div>
                     </div>
                 </div>
             `;
@@ -539,73 +550,72 @@
 </head>
 <body class="bg-slate-100 min-h-screen flex font-sans">
 
-    <!-- TELA DE LOGIN / CADASTRO / REDEFINIÇÃO -->
+    <!-- TELA DE LOGIN / CADASTRO / REDEFINIÇÃO COM SUPORTE A ENTER -->
     <div id="tela-login" class="fixed inset-0 bg-[#0B192C] z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-200 text-center relative">
             <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-16 h-16 rounded-xl object-cover shadow-md border-2 border-[#D4AF37] mx-auto mb-4">
             <h2 class="text-2xl font-black text-[#0B192C] tracking-wide">KRONOS GS</h2>
             <p class="text-slate-400 text-xs uppercase tracking-widest mt-1">ERP Executive Suite</p>
             
-            <!-- FORMULÁRIO DE ENTRADA -->
-            <div id="form-entrar" class="mt-6 space-y-4 text-left block">
+            <!-- FORMULÁRIO DE ENTRADA (AGORA USANDO <form> PARA ACEITAR ENTER) -->
+            <form id="form-entrar" class="mt-6 space-y-4 text-left block" onsubmit="event.preventDefault(); fazerLogin();">
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase">E-mail</label>
-                    <input type="email" id="loginEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="seu-email@empresa.com">
+                    <input type="email" id="loginEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="seu-email@empresa.com" required>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase">Senha</label>
-                    <input type="password" id="loginSenha" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="••••••••">
+                    <input type="password" id="loginSenha" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="••••••••" required>
                 </div>
                 
-                <!-- CHECKBOX DE AUTORIZAÇÃO DE PERSISTÊNCIA -->
                 <div class="flex items-center gap-2 pt-1">
                     <input type="checkbox" id="lembrarAutorizado" class="w-4 h-4 text-[#0B192C] rounded border-slate-300 focus:ring-[#0B192C]">
                     <label for="lembrarAutorizado" class="text-xs text-slate-600 font-medium cursor-pointer">Autorizar gravação do login neste dispositivo</label>
                 </div>
 
-                <button onclick="fazerLogin()" class="w-full py-3.5 bg-[#0B192C] hover:bg-[#1E3E62] text-[#D4AF37] font-bold rounded-lg shadow-md transition-all tracking-wider text-sm border border-[#D4AF37]">
+                <button type="submit" class="w-full py-3.5 bg-[#0B192C] hover:bg-[#1E3E62] text-[#D4AF37] font-bold rounded-lg shadow-md transition-all tracking-wider text-sm border border-[#D4AF37]">
                     ACESSAR SISTEMA
                 </button>
                 
                 <div class="flex justify-between items-center text-xs pt-2">
-                    <button onclick="mostrarPainelLogin('cadastro')" class="text-blue-600 hover:underline font-semibold">Criar Cadastro</button>
-                    <button onclick="mostrarPainelLogin('redefinir')" class="text-slate-500 hover:underline">Esqueci a senha</button>
+                    <button type="button" onclick="mostrarPainelLogin('cadastro')" class="text-blue-600 hover:underline font-semibold">Criar Cadastro</button>
+                    <button type="button" onclick="mostrarPainelLogin('redefinir')" class="text-slate-500 hover:underline">Esqueci a senha</button>
                 </div>
-            </div>
+            </form>
 
             <!-- FORMULÁRIO DE CADASTRO -->
-            <div id="form-cadastro" class="mt-6 space-y-4 text-left hidden">
+            <form id="form-cadastro" class="mt-6 space-y-4 text-left hidden" onsubmit="event.preventDefault(); fazerCadastro();">
                 <h3 class="text-sm font-bold text-[#0B192C] uppercase border-b pb-2">Novo Cadastro</h3>
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase">E-mail</label>
-                    <input type="email" id="cadEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="novo@empresa.com">
+                    <input type="email" id="cadEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="novo@empresa.com" required>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase">Senha</label>
-                    <input type="password" id="cadSenha" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="••••••••">
+                    <input type="password" id="cadSenha" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="••••••••" required>
                 </div>
-                <button onclick="fazerCadastro()" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-md transition-all tracking-wider text-sm">
+                <button type="submit" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-md transition-all tracking-wider text-sm">
                     CADASTRAR CONTA
                 </button>
                 <div class="text-center pt-2">
-                    <button onclick="mostrarPainelLogin('entrar')" class="text-xs text-slate-600 hover:underline font-semibold">← Voltar para o Login</button>
+                    <button type="button" onclick="mostrarPainelLogin('entrar')" class="text-xs text-slate-600 hover:underline font-semibold">← Voltar para o Login</button>
                 </div>
-            </div>
+            </form>
 
             <!-- FORMULÁRIO DE REDEFINIÇÃO DE SENHA -->
-            <div id="form-redefinir" class="mt-6 space-y-4 text-left hidden">
+            <form id="form-redefinir" class="mt-6 space-y-4 text-left hidden" onsubmit="event.preventDefault(); redefinirSenha();">
                 <h3 class="text-sm font-bold text-[#0B192C] uppercase border-b pb-2">Redefinir Senha</h3>
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase">E-mail cadastrado</label>
-                    <input type="email" id="redEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="seu-email@empresa.com">
+                    <input type="email" id="redEmail" class="w-full mt-1 px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:border-[#0B192C] text-sm" placeholder="seu-email@empresa.com" required>
                 </div>
-                <button onclick="redefinirSenha()" class="w-full py-3.5 bg-[#0B192C] hover:bg-[#1E3E62] text-[#D4AF37] font-bold rounded-lg shadow-md transition-all tracking-wider text-sm border border-[#D4AF37]">
+                <button type="submit" class="w-full py-3.5 bg-[#0B192C] hover:bg-[#1E3E62] text-[#D4AF37] font-bold rounded-lg shadow-md transition-all tracking-wider text-sm border border-[#D4AF37]">
                     ENVIAR INSTRUÇÕES
                 </button>
                 <div class="text-center pt-2">
-                    <button onclick="mostrarPainelLogin('entrar')" class="text-xs text-slate-600 hover:underline font-semibold">← Voltar para o Login</button>
+                    <button type="button" onclick="mostrarPainelLogin('entrar')" class="text-xs text-slate-600 hover:underline font-semibold">← Voltar para o Login</button>
                 </div>
-            </div>
+            </form>
 
             <p id="loginErro" class="text-center text-xs font-semibold text-rose-600 mt-4"></p>
             <p id="loginSucesso" class="text-center text-xs font-semibold text-emerald-600 mt-4"></p>
@@ -645,7 +655,13 @@
                 </button>
             </nav>
 
-            <div class="p-6">
+            <div class="p-6 space-y-3">
+                <div class="bg-[#1E3E62] rounded-lg p-4 text-center border border-[#2b527d]">
+                    <p class="text-xs text-slate-300">Sistema Conectado</p>
+                    <!-- SELO DE USUÁRIO X ADMINISTRADOR -->
+                    <p id="badge-role" class="text-xs font-bold mt-1"></p>
+                </div>
+
                 <button onclick="fazerLogout()" class="w-full py-2.5 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white text-xs font-bold rounded-lg border border-rose-500/30 transition-all">
                     Sair do Sistema (Logout)
                 </button>
