@@ -6,7 +6,7 @@
     <title>Kronos GS - ERP Executive</title>
     <link rel="icon" type="image/jpeg" href="https://i.imgur.com/NZyhksv.jpeg">
     
-    <!-- Importação da fonte moderna Inter -->
+    <!-- Fonte Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -16,9 +16,7 @@
         tailwind.config = {
             theme: {
                 extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    }
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
                 }
             }
         }
@@ -75,15 +73,20 @@
                 
                 const badgeRole = document.getElementById('badge-role');
                 const menuAdmin = document.getElementById('menu-admin');
+                const userEmailDisplay = document.getElementById('user-email-display');
+                const userInitial = document.getElementById('user-initial');
+
+                if (userEmailDisplay) userEmailDisplay.innerText = user.email;
+                if (userInitial) userInitial.innerText = user.email.charAt(0).toUpperCase();
                 
                 if (userEmail === EMAIL_ADMIN) {
                     menuAdmin.classList.remove('hidden');
                     badgeRole.innerText = "⭐ ADMINISTRADOR";
-                    badgeRole.className = "text-xs font-semibold text-[#D4AF37] mt-1 tracking-wider";
+                    badgeRole.className = "text-[10px] font-bold text-[#D4AF37] mt-0.5 tracking-wider";
                 } else {
                     menuAdmin.classList.add('hidden');
                     badgeRole.innerText = "👤 USUÁRIO";
-                    badgeRole.className = "text-xs font-semibold text-slate-400 mt-1 tracking-wider";
+                    badgeRole.className = "text-[10px] font-bold text-slate-400 mt-0.5 tracking-wider";
                 }
 
                 abrirAba('dashboard');
@@ -260,11 +263,11 @@
                     if(stU.includes('CANCELADO') || stU.includes('NEGATIVADO')) corSt = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
 
                     tabelaUltimos.innerHTML += `
-                        <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/40 transition-colors">
-                            <td class="px-6 py-3.5 text-sm text-slate-200 font-medium">${item.cliente || '-'}</td>
-                            <td class="px-6 py-3.5 text-sm text-slate-400">${item.marca || '-'}</td>
-                            <td class="px-6 py-3.5 text-sm"><span class="px-2.5 py-1 text-xs font-semibold rounded-md border ${corSt}">${item.status}</span></td>
-                            <td class="px-6 py-3.5 text-sm text-[#D4AF37] font-medium">R$ ${Number(item.valor || 0).toFixed(2)}</td>
+                        <tr class="hover:bg-[#112238]/60 border-b border-[#1E3859]/30 transition-colors">
+                            <td class="px-6 py-4 text-sm text-slate-200 font-medium">${item.cliente || '-'}</td>
+                            <td class="px-6 py-4 text-sm text-slate-400">${item.marca || '-'}</td>
+                            <td class="px-6 py-4 text-sm"><span class="px-2.5 py-1 text-xs font-semibold rounded-md border ${corSt}">${item.status}</span></td>
+                            <td class="px-6 py-4 text-sm text-[#D4AF37] font-semibold">R$ ${Number(item.valor || 0).toFixed(2)}</td>
                         </tr>
                     `;
                 });
@@ -323,14 +326,14 @@
                     : '<span class="px-2.5 py-1 text-xs font-semibold bg-amber-500/10 text-amber-400 rounded-md border border-amber-500/20">PENDENTE</span>';
                 
                 html += `
-                    <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/40 transition-colors">
-                        <td class="px-6 py-3.5 text-sm text-slate-200 font-medium">${String(data.cliente_id || '').substring(0, 30)}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-400">${data.marca || ''}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-400">Dia ${data.dia_vencimento}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-200 font-medium">R$ ${Number(data.valor_total || 0).toFixed(2)}</td>
-                        <td class="px-6 py-3.5 text-sm text-emerald-400 font-medium">R$ ${Number(data.valor_pago || 0).toFixed(2)}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-300 text-center">${data.parcelas_pagas || 0} / ${data.quantidade_parcelas || 1}</td>
-                        <td class="px-6 py-3.5 text-sm flex items-center gap-3">
+                    <tr class="hover:bg-[#112238]/60 border-b border-[#1E3859]/30 transition-colors">
+                        <td class="px-6 py-4 text-sm text-slate-200 font-medium">${String(data.cliente_id || '').substring(0, 30)}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">Dia ${data.dia_vencimento}</td>
+                        <td class="px-6 py-4 text-sm text-slate-200 font-semibold">R$ ${Number(data.valor_total || 0).toFixed(2)}</td>
+                        <td class="px-6 py-4 text-sm text-emerald-400 font-semibold">R$ ${Number(data.valor_pago || 0).toFixed(2)}</td>
+                        <td class="px-6 py-4 text-sm text-slate-300 text-center">${data.parcelas_pagas || 0} / ${data.quantidade_parcelas || 1}</td>
+                        <td class="px-6 py-4 text-sm flex items-center gap-3">
                             ${badge}
                             <button onclick="editarParcelas('${data.id}', ${data.parcelas_pagas || 0}, ${data.quantidade_parcelas || 1}, ${data.valor_total || 0})" class="px-3 py-1 bg-[#112238] hover:bg-[#D4AF37] hover:text-[#070F18] text-slate-300 text-xs font-medium rounded-lg border border-[#1E3859] transition-all">Atualizar</button>
                             <button onclick="excluirRegistroCobranca('${data.id}')" class="px-2 py-1 text-rose-400 hover:text-rose-200 text-xs font-bold">✕</button>
@@ -397,7 +400,7 @@
             janela.document.write(`<h1 class="text-2xl font-bold text-[#D4AF37]">Relatório de Faturamento - Ciclo Dia ${cicloAtual}</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
             janela.document.write(`<table class="w-full border-collapse border border-slate-700 text-left text-xs"><tr class="bg-slate-800"><th class="border border-slate-700 p-2">Cliente</th><th class="border border-slate-700 p-2">Marca</th><th class="border border-slate-700 p-2">Valor Parcela</th><th class="border border-slate-700 p-2">Valor Pago</th><th class="border border-slate-700 p-2">Status</th></tr>`);
             cacheCobrancas.forEach(c => {
-                janela.document.write(`<tr><td class="border border-slate-700 p-2 font-medium">${c.cliente_id}</td><td class="border border-slate-700 p-2">${c.marca}</td><td class="border border-slate-700 p-2">R$ ${Number(c.valor_total||0).toFixed(2)}</td><td class="border border-slate-700 p-2 text-emerald-400 font-medium">R$ ${Number(c.valor_pago||0).toFixed(2)}</td><td class="border border-slate-700 p-2 uppercase font-semibold">${c.status_pagamento}</td></tr>`);
+                janela.document.write(`<tr><td class="border border-slate-700 p-2 font-medium">${c.cliente_id}</td><td class="border border-slate-700 p-2">${c.marca}</td><td class="border border-slate-700 p-2">R$ ${Number(c.valor_total||0).toFixed(2)}</td><td class="border border-slate-700 p-2 text-emerald-400 font-semibold">R$ ${Number(c.valor_pago||0).toFixed(2)}</td><td class="border border-slate-700 p-2 uppercase font-semibold">${c.status_pagamento}</td></tr>`);
             });
             janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#D4AF37] text-slate-900 rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
@@ -474,14 +477,14 @@
                 let badgeStatus = `<span class="px-2.5 py-1 text-xs font-semibold ${corStatus} rounded-md border">${data.status_cliente || 'QUITADO'}</span>`;
 
                 html += `
-                    <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/40 transition-colors">
-                        <td class="px-6 py-3.5 text-sm text-slate-200 font-medium">${data.cliente || ''}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-400">${data.empresa || data.marca || ''}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-400">${data.telefone || ''}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-200 font-medium">R$ ${Number(data.valor_pc || 0).toFixed(2)}</td>
-                        <td class="px-6 py-3.5 text-sm">${badgeStatus}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-400">${data.anuidade || '-'}</td>
-                        <td class="px-6 py-3.5 text-sm text-right space-x-2">
+                    <tr class="hover:bg-[#112238]/60 border-b border-[#1E3859]/30 transition-colors">
+                        <td class="px-6 py-4 text-sm text-slate-200 font-medium">${data.cliente || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">${data.empresa || data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">${data.telefone || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-200 font-semibold">R$ ${Number(data.valor_pc || 0).toFixed(2)}</td>
+                        <td class="px-6 py-4 text-sm">${badgeStatus}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">${data.anuidade || '-'}</td>
+                        <td class="px-6 py-4 text-sm text-right space-x-2">
                             <button onclick="abrirModalEditarCliente('${data.id}', \`${data.cliente || ''}\`, \`${data.empresa || data.marca || ''}\`, \`${data.telefone || ''}\`, ${data.valor_pc || 0}, \`${data.status_cliente || ''}\`, \`${data.anuidade || ''}\`)" class="px-3 py-1 bg-[#112238] hover:bg-[#D4AF37] hover:text-[#070F18] text-slate-300 text-xs font-medium rounded-lg border border-[#1E3859] transition-all">Editar</button>
                             <button onclick="excluirCliente('${data.id}')" class="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-xs font-medium rounded-lg transition-all border border-rose-500/20">Excluir</button>
                         </td>
@@ -643,10 +646,10 @@
             let html = '';
             filtrados.slice(0, 500).forEach(data => {
                 html += `
-                    <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/40 transition-colors">
-                        <td class="px-6 py-3.5 text-sm font-mono text-slate-300 font-medium">${data.processo || ''}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-200 font-medium">${data.marca || ''}</td>
-                        <td class="px-6 py-3.5 text-sm"><span class="px-2.5 py-1 text-xs font-semibold bg-blue-500/10 text-blue-400 rounded-md border border-blue-500/20">${data.fase}</span></td>
+                    <tr class="hover:bg-[#112238]/60 border-b border-[#1E3859]/30 transition-colors">
+                        <td class="px-6 py-4 text-sm font-mono text-slate-300 font-medium">${data.processo || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-200 font-medium">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm"><span class="px-2.5 py-1 text-xs font-semibold bg-blue-500/10 text-blue-400 rounded-md border border-blue-500/20">${data.fase}</span></td>
                     </tr>
                 `;
             });
@@ -697,15 +700,15 @@
                     : '<span class="px-2.5 py-1 text-xs font-semibold bg-amber-500/10 text-amber-400 rounded-md border border-amber-500/20">PENDENTE</span>';
 
                 html += `
-                    <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/40 transition-colors">
-                        <td class="px-6 py-3.5 text-sm text-slate-200 font-medium">${data.cliente || ''}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-400">${data.marca || ''}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-400">${data.vencimento || ''}</td>
-                        <td class="px-6 py-3.5 text-sm flex items-center gap-2">
+                    <tr class="hover:bg-[#112238]/60 border-b border-[#1E3859]/30 transition-colors">
+                        <td class="px-6 py-4 text-sm text-slate-200 font-medium">${data.cliente || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">${data.vencimento || ''}</td>
+                        <td class="px-6 py-4 text-sm flex items-center gap-2">
                             ${badgeStatus}
                             <button onclick="alternarStatusGRU('${data.id}', '${data.status_pagamento || 'pendente'}')" class="px-2.5 py-1 bg-[#112238] hover:bg-[#D4AF37] hover:text-[#070F18] text-slate-300 text-xs font-medium rounded-lg border border-[#1E3859] transition-all">Alterar</button>
                         </td>
-                        <td class="px-6 py-3.5 text-sm text-slate-300">
+                        <td class="px-6 py-4 text-sm text-slate-300">
                             <div class="flex items-center gap-2">
                                 <span class="truncate max-w-xs text-xs text-slate-400">${data.anotacoes || 'Sem anotações'}</span>
                                 <button onclick="editarAnotacaoGRU('${data.id}', \`${data.anotacoes || ''}\`)" class="px-2.5 py-1 bg-[#112238] hover:bg-[#D4AF37] hover:text-[#070F18] text-slate-300 text-xs font-medium rounded-lg border border-[#1E3859] transition-all">Editar</button>
@@ -784,12 +787,12 @@
             let html = '';
             dados.slice(0, 500).forEach(data => {
                 html += `
-                    <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/40 transition-colors">
-                        <td class="px-6 py-3.5 text-sm text-slate-200 font-medium">${data.cliente || ''}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-400">${data.marca || ''}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-400">${data.data_pagamento || ''}</td>
-                        <td class="px-6 py-3.5 text-sm text-slate-200 font-medium">R$ ${Number(data.valor || 0).toFixed(2)}</td>
-                        <td class="px-6 py-3.5 text-sm font-semibold text-emerald-400">${data.status || 'PAGO'}</td>
+                    <tr class="hover:bg-[#112238]/60 border-b border-[#1E3859]/30 transition-colors">
+                        <td class="px-6 py-4 text-sm text-slate-200 font-medium">${data.cliente || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">${data.marca || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-400">${data.data_pagamento || ''}</td>
+                        <td class="px-6 py-4 text-sm text-slate-200 font-semibold">R$ ${Number(data.valor || 0).toFixed(2)}</td>
+                        <td class="px-6 py-4 text-sm font-semibold text-emerald-400">${data.status || 'PAGO'}</td>
                     </tr>
                 `;
             });
@@ -811,7 +814,7 @@
             janela.document.write(`<h1 class="text-2xl font-bold text-[#D4AF37]">Relatório Financeiro / Base Administrativo</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
             janela.document.write(`<table class="w-full border-collapse border border-slate-700 text-left text-xs"><tr class="bg-slate-800"><th class="border border-slate-700 p-2">Cliente</th><th class="border border-slate-700 p-2">Marca</th><th class="border border-slate-700 p-2">Data</th><th class="border border-slate-700 p-2">Valor</th><th class="border border-slate-700 p-2">Status</th></tr>`);
             cacheMensal.forEach(c => {
-                janela.document.write(`<tr><td class="border border-slate-700 p-2 font-medium">${c.cliente}</td><td class="border border-slate-700 p-2">${c.marca}</td><td class="border border-slate-700 p-2">${c.data_pagamento}</td><td class="border border-slate-700 p-2 text-emerald-400 font-medium">R$ ${Number(c.valor||0).toFixed(2)}</td><td class="border border-slate-700 p-2 uppercase font-semibold">${c.status}</td></tr>`);
+                janela.document.write(`<tr><td class="border border-slate-700 p-2 font-medium">${c.cliente}</td><td class="border border-slate-700 p-2">${c.marca}</td><td class="border border-slate-700 p-2">${c.data_pagamento}</td><td class="border border-slate-700 p-2 text-emerald-400 font-semibold">R$ ${Number(c.valor||0).toFixed(2)}</td><td class="border border-slate-700 p-2 uppercase font-semibold">${c.status}</td></tr>`);
             });
             janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#D4AF37] text-slate-900 rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
@@ -867,12 +870,12 @@
                         : '<span class="px-2.5 py-1 text-xs font-semibold bg-rose-500/10 text-rose-400 rounded-md border border-rose-500/20">BLOQUEADO</span>';
 
                     tbody.innerHTML += `
-                        <tr class="hover:bg-[#112238]/50 border-b border-[#1E3859]/40 transition-colors">
-                            <td class="px-6 py-3.5 text-sm text-slate-200 font-medium">${data.nome || '-'}</td>
-                            <td class="px-6 py-3.5 text-sm text-slate-400">${data.email || ''}</td>
-                            <td class="px-6 py-3.5 text-sm text-slate-400">${data.criado_em || '-'}</td>
-                            <td class="px-6 py-3.5 text-sm">${badgeStatus}</td>
-                            <td class="px-6 py-3.5 text-sm text-right space-x-2">
+                        <tr class="hover:bg-[#112238]/60 border-b border-[#1E3859]/30 transition-colors">
+                            <td class="px-6 py-4 text-sm text-slate-200 font-medium">${data.nome || '-'}</td>
+                            <td class="px-6 py-4 text-sm text-slate-400">${data.email || ''}</td>
+                            <td class="px-6 py-4 text-sm text-slate-400">${data.criado_em || '-'}</td>
+                            <td class="px-6 py-4 text-sm">${badgeStatus}</td>
+                            <td class="px-6 py-4 text-sm text-right space-x-2">
                                 <button onclick="editarNomeUsuario('${docId}', '${data.nome || ''}')" class="px-3 py-1 bg-[#112238] hover:bg-[#D4AF37] hover:text-[#070F18] text-slate-300 text-xs font-medium rounded-lg border border-[#1E3859] transition-all">Editar Nome</button>
                                 <button onclick="alternarStatusUsuario('${docId}', '${status}')" class="px-3 py-1 ${status === 'ativo' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500 hover:text-white' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white'} text-xs font-medium rounded-lg transition-all">${status === 'ativo' ? 'Bloquear' : 'Ativar'}</button>
                                 <button onclick="excluirUsuarioAdmin('${docId}')" class="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-xs font-medium rounded-lg transition-all border border-rose-500/20">Excluir</button>
@@ -1193,8 +1196,8 @@
 
     <!-- APLICAÇÃO PRINCIPAL -->
     <div id="app-container" class="hidden flex w-full">
-        <!-- MENU LATERAL EXECUTIVO -->
-        <aside class="w-72 bg-[#0B192C] text-white min-h-screen flex flex-col fixed shadow-2xl z-10 border-r border-[#1E3859]">
+        <!-- MENU LATERAL EXECUTIVO FIXO -->
+        <aside class="w-72 bg-[#0B192C] text-white h-screen flex flex-col fixed inset-y-0 left-0 shadow-2xl z-20 border-r border-[#1E3859]">
             <div class="p-6 border-b border-[#1E3859] flex items-center gap-3 bg-[#070F18]">
                 <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Kronos GS Logo" class="w-12 h-12 rounded-xl object-cover shadow-md border-2 border-[#D4AF37]">
                 <div>
@@ -1203,7 +1206,7 @@
                 </div>
             </div>
             
-            <nav class="flex-1 px-4 py-6 space-y-1.5">
+            <nav class="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
                 <p class="text-[10px] uppercase font-bold text-slate-500 tracking-wider px-4 mb-2">Principal</p>
                 <button id="btn-dashboard" onclick="abrirAba('dashboard')" class="btn-menu w-full flex items-center gap-3 px-4 py-3 bg-[#112238] text-[#D4AF37] rounded-xl font-medium transition-all text-left border-l-4 border-[#D4AF37] shadow-sm">
                     🏠 Dashboard Geral
@@ -1230,14 +1233,19 @@
                 </button>
             </nav>
 
-            <div class="p-6 space-y-3 bg-[#070F18] border-t border-[#1E3859]">
-                <div class="bg-[#0B192C] rounded-xl p-3 text-center border border-[#1E3859]">
-                    <p class="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Sistema Conectado</p>
-                    <p id="badge-role" class="text-xs font-semibold mt-0.5"></p>
+            <div class="p-4 space-y-3 bg-[#070F18] border-t border-[#1E3859]">
+                <div class="bg-[#0B192C] rounded-xl p-3 border border-[#1E3859] flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37] font-bold text-sm shrink-0">
+                        <span id="user-initial">K</span>
+                    </div>
+                    <div class="overflow-hidden">
+                        <p id="user-email-display" class="text-xs font-semibold text-white truncate">Carregando...</p>
+                        <p id="badge-role" class="text-[10px] font-bold mt-0.5"></p>
+                    </div>
                 </div>
 
-                <button onclick="fazerLogout()" class="w-full py-2.5 bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white text-xs font-semibold rounded-xl border border-rose-500/20 transition-all shadow-sm">
-                    Sair do Sistema (Logout)
+                <button onclick="fazerLogout()" class="w-full py-2.5 bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white text-xs font-semibold rounded-xl border border-rose-500/20 transition-all shadow-sm flex items-center justify-center gap-2">
+                    <span>🚪</span> Sair do Sistema (Logout)
                 </button>
             </div>
         </aside>
@@ -1246,7 +1254,7 @@
         <main class="ml-72 flex-1 p-10 w-full bg-[#070F18] min-h-screen">
 
             <!-- MODAL REGISTRO CLIENTE/MARCA (NOVO / EDITAR) -->
-            <div id="modalCliente" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+            <div id="modalCliente" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
                 <div class="bg-[#0B192C] rounded-3xl shadow-2xl max-w-lg w-full p-8 border border-[#1E3859] relative text-white">
                     <h3 id="modalClienteTitulo" class="text-lg font-bold text-white mb-6">Novo Registro</h3>
                     <form id="formCliente" onsubmit="salvarClienteManual(event)" class="space-y-4">
@@ -1293,7 +1301,7 @@
             </div>
 
             <!-- MODAL COBRANÇA (NOVA MANUAL) -->
-            <div id="modalCobranca" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+            <div id="modalCobranca" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
                 <div class="bg-[#0B192C] rounded-3xl shadow-2xl max-w-lg w-full p-8 border border-[#1E3859] relative text-white">
                     <h3 class="text-lg font-bold text-white mb-6">Nova Cobrança / Faturamento</h3>
                     <form id="formCobrancaManual" onsubmit="salvarCobrancaManual(event)" class="space-y-4">
@@ -1342,7 +1350,7 @@
 
             <!-- ABA 0: DASHBOARD GERAL -->
             <div id="aba-dashboard" class="aba-conteudo block">
-                <div class="flex justify-between items-center mb-10">
+                <div class="flex justify-between items-center mb-8">
                     <div>
                         <h2 class="text-2xl font-bold text-white tracking-tight">Dashboard Executivo</h2>
                         <p class="text-slate-400 text-sm mt-0.5">Resumo consolidado de todas as funções, valores de parcelas e status do sistema.</p>
@@ -1351,36 +1359,36 @@
 
                 <!-- CARDS DE MÉTRICAS -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] relative overflow-hidden">
-                        <div class="absolute top-0 right-0 p-4 text-[#D4AF37] opacity-20 text-3xl">👥</div>
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859]/80 hover:border-[#D4AF37]/50 transition-all relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 text-[#D4AF37] opacity-15 text-3xl">👥</div>
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total de Clientes (Base)</p>
                         <p id="dashCardTotalClientes" class="text-3xl font-bold text-white mt-2">0</p>
                     </div>
-                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] relative overflow-hidden">
-                        <div class="absolute top-0 right-0 p-4 text-emerald-400 opacity-20 text-3xl">✅</div>
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859]/80 hover:border-emerald-500/50 transition-all relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 text-emerald-400 opacity-15 text-3xl">✅</div>
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Quitados / Pagantes</p>
                         <p id="dashCardQuitados" class="text-3xl font-bold text-emerald-400 mt-2">0</p>
                     </div>
-                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] relative overflow-hidden">
-                        <div class="absolute top-0 right-0 p-4 text-amber-400 opacity-20 text-3xl">⚠️</div>
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859]/80 hover:border-amber-500/50 transition-all relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 text-amber-400 opacity-15 text-3xl">⚠️</div>
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Inadimplentes / Cancelados</p>
                         <p id="dashCardInadimplentes" class="text-3xl font-bold text-amber-400 mt-2">0</p>
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] relative overflow-hidden">
-                        <div class="absolute top-0 right-0 p-4 text-[#D4AF37] opacity-20 text-3xl">💰</div>
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859]/80 hover:border-[#D4AF37]/50 transition-all relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 text-[#D4AF37] opacity-15 text-3xl">💰</div>
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Valor Total de Parcelas (PC)</p>
                         <p id="dashCardValorTotal" class="text-2xl font-bold text-[#D4AF37] mt-2">R$ 0,00</p>
                     </div>
-                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] relative overflow-hidden">
-                        <div class="absolute top-0 right-0 p-4 text-emerald-400 opacity-20 text-3xl">📥</div>
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859]/80 hover:border-emerald-500/50 transition-all relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 text-emerald-400 opacity-15 text-3xl">📥</div>
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Arrecadado (Faturamento)</p>
                         <p id="dashCardArrecadado" class="text-2xl font-bold text-emerald-400 mt-2">R$ 0,00</p>
                     </div>
-                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859] relative overflow-hidden">
-                        <div class="absolute top-0 right-0 p-4 text-blue-400 opacity-20 text-3xl">📖</div>
+                    <div class="bg-[#0B192C] p-6 rounded-2xl shadow-sm border border-[#1E3859]/80 hover:border-blue-500/50 transition-all relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 text-blue-400 opacity-15 text-3xl">📖</div>
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Processos INPI (RPI)</p>
                         <p id="dashCardRpi" class="text-2xl font-bold text-blue-400 mt-2">0</p>
                     </div>
@@ -1403,8 +1411,8 @@
                                 <th class="px-6 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Valor Pc</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaUltimosRegistros" class="bg-[#0B192C] divide-y divide-[#1E3859]/40">
-                            <tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Carregando registros...</td></tr>
+                        <tbody id="tabelaUltimosRegistros" class="bg-[#0B192C] divide-y divide-[#1E3859]/30">
+                            <tr><td colspan="4" class="px-6 py-6 text-center text-slate-400">Carregando registros...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1412,7 +1420,7 @@
 
             <!-- ABA 1: COBRANÇAS -->
             <div id="aba-cobrancas" class="aba-conteudo hidden">
-                <div class="flex justify-between items-center mb-10">
+                <div class="flex justify-between items-center mb-8">
                     <div>
                         <h2 class="text-2xl font-bold text-white tracking-tight">Faturamento e Ciclos</h2>
                         <p class="text-slate-400 text-sm mt-0.5">Gestão de pagamentos dos dias 5 e 20 com baixa automática de parcelas.</p>
@@ -1463,14 +1471,14 @@
                                 <th class="px-6 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Ações / Status</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaCobrancas" class="bg-[#0B192C] divide-y divide-[#1E3859]/40"></tbody>
+                        <tbody id="tabelaCobrancas" class="bg-[#0B192C] divide-y divide-[#1E3859]/30"></tbody>
                     </table>
                 </div>
             </div>
 
             <!-- ABA 2: BASE MARCAS FINANCEIRO -->
             <div id="aba-clientes" class="aba-conteudo hidden">
-                <div class="flex justify-between items-center mb-10">
+                <div class="flex justify-between items-center mb-8">
                     <div>
                         <h2 class="text-2xl font-bold text-white tracking-tight">Base Marcas Financeiro</h2>
                         <p class="text-slate-400 text-sm mt-0.5">Gestão de Empresas, Clientes, Telefones, Valores, Status e Anuidades.</p>
@@ -1514,14 +1522,14 @@
                                 <th class="px-6 py-3.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Ações</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaClientes" class="bg-[#0B192C] divide-y divide-[#1E3859]/40"></tbody>
+                        <tbody id="tabelaClientes" class="bg-[#0B192C] divide-y divide-[#1E3859]/30"></tbody>
                     </table>
                 </div>
             </div>
 
             <!-- ABA 3: RPI -->
             <div id="aba-rpi" class="aba-conteudo hidden">
-                <div class="flex justify-between items-center mb-10">
+                <div class="flex justify-between items-center mb-8">
                     <div>
                         <h2 class="text-2xl font-bold text-white tracking-tight">Monitoramento INPI (RPI)</h2>
                         <p class="text-slate-400 text-sm mt-0.5">Filtre os processos por fase clicando nos cartões abaixo.</p>
@@ -1547,14 +1555,14 @@
                                 <th class="px-6 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Fase</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaRPI" class="bg-[#0B192C] divide-y divide-[#1E3859]/40"></tbody>
+                        <tbody id="tabelaRPI" class="bg-[#0B192C] divide-y divide-[#1E3859]/30"></tbody>
                     </table>
                 </div>
             </div>
 
             <!-- ABA 4: GRU -->
             <div id="aba-gru" class="aba-conteudo hidden">
-                <div class="flex justify-between items-center mb-10">
+                <div class="flex justify-between items-center mb-8">
                     <div>
                         <h2 class="text-2xl font-bold text-white tracking-tight">Gestão de Guias GRU</h2>
                         <p class="text-slate-400 text-sm mt-0.5">Controle de pagamentos, vencimentos e anotações de situação.</p>
@@ -1579,14 +1587,14 @@
                                 <th class="px-6 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Anotações / Situação</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaGRU" class="bg-[#0B192C] divide-y divide-[#1E3859]/40"></tbody>
+                        <tbody id="tabelaGRU" class="bg-[#0B192C] divide-y divide-[#1E3859]/30"></tbody>
                     </table>
                 </div>
             </div>
 
             <!-- ABA 5: BASE ADMINISTRATIVO -->
             <div id="aba-mensal" class="aba-conteudo hidden">
-                <div class="flex justify-between items-center mb-10">
+                <div class="flex justify-between items-center mb-8">
                     <div>
                         <h2 class="text-2xl font-bold text-white tracking-tight">Base Administrativo</h2>
                         <p class="text-slate-400 text-sm mt-0.5">Gestão de contratos e relatórios financeiros administrativos.</p>
@@ -1611,7 +1619,7 @@
                                 <th class="px-6 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
                             </tr>
                         </thead>
-                        <tbody id="tabelaMensal" class="bg-[#0B192C] divide-y divide-[#1E3859]/40"></tbody>
+                        <tbody id="tabelaMensal" class="bg-[#0B192C] divide-y divide-[#1E3859]/30"></tbody>
                     </table>
                 </div>
             </div>
