@@ -475,48 +475,79 @@
             janela.document.close();
         }
 
-        // --- MÓDULO GRU ---
+        // --- MÓDULO GRU (ATUALIZADO) ---
         let cacheGRU = [];
         window.carregarGRU = async function() {
             const tabela = document.getElementById('tabelaGRU');
-            tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Carregando...</td></tr>`;
+            tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Carregando...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "gru"));
                 cacheGRU = [];
                 tabela.innerHTML = '';
-                if (querySnapshot.empty) { tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Nenhuma GRU cadastrada.</td></tr>`; return; }
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    cacheGRU.push(data);
+                if (querySnapshot.empty) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhuma GRU cadastrada.</td></tr>`; return; }
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    cacheGRU.push({ id: docSnap.id, ...data });
                 });
                 renderizarTabelaGRU(cacheGRU);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro.</td></tr>`; }
         }
 
         window.renderizarTabelaGRU = function(dados) {
             const tabela = document.getElementById('tabelaGRU');
             tabela.innerHTML = '';
             if (dados.length === 0) {
-                tabela.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Nenhum registro encontrado.</td></tr>`;
+                tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">Nenhum registro encontrado.</td></tr>`;
                 return;
             }
             dados.forEach(data => {
+                const badgeStatus = data.status_pagamento === 'pago' 
+                    ? '<span class="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded">PAGO</span>' 
+                    : '<span class="px-2 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded">PENDENTE</span>';
+
                 tabela.innerHTML += `
                     <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
                         <td class="px-6 py-4 text-sm text-slate-800 font-bold">${data.cliente || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-600">${data.marca || ''}</td>
                         <td class="px-6 py-4 text-sm text-slate-500">${data.vencimento || ''}</td>
-                        <td class="px-6 py-4 text-sm font-bold text-emerald-600">R$ ${Number(data.valor || 0).toFixed(2)}</td>
+                        <td class="px-6 py-4 text-sm flex items-center gap-2">
+                            ${badgeStatus}
+                            <button onclick="alternarStatusGRU('${data.id}', '${data.status_pagamento || 'pendente'}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded border border-slate-300">Alterar</button>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-slate-600">
+                            <div class="flex items-center gap-2">
+                                <span class="truncate max-w-xs text-xs text-slate-600">${data.anotacoes || 'Sem anotações'}</span>
+                                <button onclick="editarAnotacaoGRU('${data.id}', \`${data.anotacoes || ''}\`)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded border border-slate-300">Editar</button>
+                            </div>
+                        </td>
                     </tr>
                 `;
             });
+        }
+
+        window.alternarStatusGRU = async function(docId, statusAtual) {
+            let novoStatus = statusAtual === 'pago' ? 'pendente' : 'pago';
+            try {
+                await updateDoc(doc(db, "gru", docId), { status_pagamento: novoStatus });
+                carregarGRU();
+            } catch (e) { alert("Erro ao atualizar status."); }
+        }
+
+        window.editarAnotacaoGRU = async function(docId, anotacaoAtual) {
+            let novaAnotacao = prompt("Digite a anotação/situação desta guia:", anotacaoAtual);
+            if (novaAnotacao === null) return;
+            try {
+                await updateDoc(doc(db, "gru", docId), { anotacoes: novaAnotacao.trim() });
+                carregarGRU();
+            } catch (e) { alert("Erro ao salvar anotação."); }
         }
 
         window.filtrarGRU = function() {
             const termo = document.getElementById('buscaGRU').value.toLowerCase();
             const filtrados = cacheGRU.filter(item => 
                 String(item.cliente || '').toLowerCase().includes(termo) || 
-                String(item.marca || '').toLowerCase().includes(termo)
+                String(item.marca || '').toLowerCase().includes(termo) ||
+                String(item.anotacoes || '').toLowerCase().includes(termo)
             );
             renderizarTabelaGRU(filtrados);
         }
@@ -525,9 +556,9 @@
             let janela = window.open('', '_blank');
             janela.document.write(`<html><head><title>Relatório de Guias GRU</title><script src="https://cdn.tailwindcss.com"><' + '/script></head><body class="p-10 font-sans">`);
             janela.document.write(`<h1 class="text-2xl font-black text-[#0B192C]">Relatório de Guias GRU</h1><p class="text-xs text-slate-500 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`);
-            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">Vencimento</th><th class="border p-2">Valor</th></tr>`);
+            janela.document.write(`<table class="w-full border-collapse border border-slate-300 text-left text-xs"><tr class="bg-slate-100"><th class="border p-2">Cliente</th><th class="border p-2">Marca</th><th class="border p-2">Vencimento</th><th class="border p-2">Status</th><th class="border p-2">Anotações</th></tr>`);
             cacheGRU.forEach(c => {
-                janela.document.write(`<tr><td class="border p-2 font-bold">${c.cliente}</td><td class="border p-2">${c.marca}</td><td class="border p-2">${c.vencimento}</td><td class="border p-2 text-emerald-600 font-bold">R$ ${Number(c.valor||0).toFixed(2)}</td></tr>`);
+                janela.document.write(`<tr><td class="border p-2 font-bold">${c.cliente}</td><td class="border p-2">${c.marca}</td><td class="border p-2">${c.vencimento}</td><td class="border p-2 uppercase font-bold">${c.status_pagamento || 'pendente'}</td><td class="border p-2">${c.anotacoes || ''}</td></tr>`);
             });
             janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-4 py-2 bg-[#0B192C] text-white rounded font-bold">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
@@ -852,16 +883,21 @@
                             if (!cli) continue;
                             let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
                             let vencimento = String(linha['VENCIMENTO'] || linha['Vencimento'] || '-').trim();
-                            let valor = parseFloat(String(linha['VALOR'] || linha['Valor'] || 0).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
 
                             const key = `${cli}_${marca}_${vencimento}`.toUpperCase();
 
                             if (mapGru.has(key)) {
                                 const docId = mapGru.get(key);
-                                await updateDoc(doc(db, "gru", docId), { cliente: cli, marca: marca, vencimento: vencimento, valor: valor });
+                                await updateDoc(doc(db, "gru", docId), { cliente: cli, marca: marca, vencimento: vencimento });
                                 salvos++;
                             } else {
-                                const docRef = await addDoc(collection(db, "gru"), { cliente: cli, marca: marca, vencimento: vencimento, valor: valor });
+                                const docRef = await addDoc(collection(db, "gru"), { 
+                                    cliente: cli, 
+                                    marca: marca, 
+                                    vencimento: vencimento, 
+                                    status_pagamento: 'pendente', 
+                                    anotacoes: '' 
+                                });
                                 mapGru.set(key, docRef.id);
                                 salvos++;
                             }
@@ -1176,15 +1212,15 @@
                 </div>
             </div>
 
-            <!-- ABA 4: GRU -->
+            <!-- ABA 4: GRU (ATUALIZADA) -->
             <div id="aba-gru" class="aba-conteudo hidden">
                 <div class="flex justify-between items-center mb-10">
                     <div>
                         <h2 class="text-3xl font-black text-[#0B192C] tracking-tight">Gestão de Guias GRU</h2>
-                        <p class="text-slate-500 mt-1">Controle de emissão e vencimentos.</p>
+                        <p class="text-slate-500 mt-1">Controle de pagamentos, vencimentos e anotações de situação.</p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="text" id="buscaGRU" onkeyup="filtrarGRU()" placeholder="🔍 Pesquisar cliente ou marca..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
+                        <input type="text" id="buscaGRU" onkeyup="filtrarGRU()" placeholder="🔍 Pesquisar cliente, marca ou anotação..." class="px-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#0B192C] w-64">
                         <button onclick="gerarRelatorioGRU()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md font-semibold text-sm shadow">Gerar Relatório</button>
                         <input type="file" id="upGru" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'gru')" />
                         <label for="upGru" class="cursor-pointer px-5 py-2.5 bg-[#0B192C] text-white rounded-md font-semibold shadow-md text-sm">
@@ -1199,7 +1235,8 @@
                                 <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Cliente</th>
                                 <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Marca</th>
                                 <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Vencimento</th>
-                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Valor</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Status</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Anotações / Situação</th>
                             </tr>
                         </thead>
                         <tbody id="tabelaGRU" class="bg-white divide-y divide-slate-100"></tbody>
