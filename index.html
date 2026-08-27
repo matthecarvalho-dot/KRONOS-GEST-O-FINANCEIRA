@@ -6,6 +6,22 @@
     <title>Kronos GS - ERP Executive Suite</title>
     <link rel="icon" type="image/jpeg" href="https://i.imgur.com/NZyhksv.jpeg">
     
+    <!-- Configurações para Web App / PWA (Aplicativo Instalável) -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#050B14">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Kronos GS">
+    <link rel="apple-touch-icon" href="https://i.imgur.com/NZyhksv.jpeg">
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW erro:', err));
+        });
+      }
+    </script>
+    
     <!-- Fonte Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -392,7 +408,7 @@
             } catch (e) { alert("Erro ao excluir."); }
         }
 
-        // --- GERADOR DE RELATÓRIOS CORRIGIDO E ROBUSTO ---
+        // --- GERADOR DE RELATÓRIOS ---
         window.gerarRelatorioCobrancas = function() {
             let janela = window.open('', '_blank');
             if (!janela) { alert("Permita pop-ups no navegador para gerar o relatório."); return; }
