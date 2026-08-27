@@ -99,6 +99,8 @@
         }
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Chart.js para Gráficos Interativos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -119,7 +121,7 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // Força o sistema a não lembrar login automaticamente (Exige login ao abrir/atualizar)
+        // Força o sistema a exigir login ao reabrir/atualizar (In-memory persistence)
         setPersistence(auth, inMemoryPersistence).catch((error) => {
             console.error("Erro na persistência:", error);
         });
@@ -127,6 +129,20 @@
         const EMAIL_ADMIN = "matthecarvalho@gmail.com";
         let cicloAtual = 5;
         let rpiCache = [];
+        let chartStatusInstance = null;
+        let chartFasesInstance = null;
+
+        // Função de Auditoria para rastreabilidade
+        window.registrarLog = async function(acaoDescricao) {
+            try {
+                const user = auth.currentUser;
+                await addDoc(collection(db, "audit_logs"), {
+                    acao: acaoDescricao,
+                    usuario: user ? user.email : 'Sistema',
+                    data: new Date().toLocaleString('pt-BR')
+                });
+            } catch (e) { console.error("Erro ao registrar auditoria:", e); }
+        };
 
         onAuthStateChanged(auth, async (user) => {
             const telaLogin = document.getElementById('tela-login');
@@ -204,6 +220,7 @@
             erroMsg.innerText = "Autenticando...";
             try {
                 await signInWithEmailAndPassword(auth, email, senha);
+                await registrarLog("Login efetuado no sistema");
             } catch (error) {
                 erroMsg.innerText = "Erro: E-mail ou senha incorretos.";
             }
@@ -228,6 +245,7 @@
                     status: 'ativo',
                     criado_em: new Date().toLocaleDateString('pt-BR')
                 });
+                await registrarLog(`Novo usuário cadastrado: ${email}`);
 
                 sucessoMsg.innerText = "Conta criada com sucesso! Faça login.";
                 setTimeout(() => mostrarPainelLogin('entrar'), 2000);
@@ -255,8 +273,10 @@
         }
 
         window.fazerLogout = function() {
-            signOut(auth).then(() => {
-                window.location.reload();
+            registrarLog("Logout efetuado").then(() => {
+                signOut(auth).then(() => {
+                    window.location.reload();
+                });
             });
         }
 
@@ -296,10 +316,32 @@
             if(abaId === 'rpi') carregarRPI();
             if(abaId === 'gru') carregarGRU();
             if(abaId === 'mensal') carregarMensal();
-            if(abaId === 'admin') carregarUsuariosAdmin();
+            if(abaId === 'admin') carregarPainelAdmin();
         }
 
-        // --- DASHBOARD GERAL ---
+        // --- WHATSAPP RAPIDO ---
+        window.enviarWhatsApp = function(telefone, nomeCliente, marca) {
+            let numLimpo = String(telefone || '').replace(/\D/g, '');
+            if (!numLimpo) { alert("Telefone não cadastrado para este cliente."); return; }
+            if (!numLimpo.startsWith('55')) numLimpo = '55' + numLimpo;
+            let msg = encodeURIComponent(`Olá ${nomeCliente || 'Cliente'}, aqui é da equipe do escritório. Entramos em contato referente à sua marca *${marca || '-'}*. Podemos conversar?`);
+            window.open(`https://wa.me/${numLimpo}?text=${msg}`, '_blank');
+        };
+
+        // --- EXPORTAR EXCEL GENÉRICO ---
+        window.exportarParaExcel = function(nomeArquivo, dadosArray) {
+            if (!dadosArray || dadosArray.length === 0) {
+                alert("Não há dados carregados para exportar.");
+                return;
+            }
+            const worksheet = XLSX.utils.json_to_sheet(dadosArray);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Relatorio");
+            XLSX.writeFile(workbook, `${nomeArquivo}.xlsx`);
+            registrarLog(`Exportação Excel gerada: ${nomeArquivo}.xlsx`);
+        };
+
+        // --- DASHBOARD GERAL COM GRÁFICOS (Chart.js) ---
         window.carregarDashboardGeral = async function() {
             try {
                 const [snapCob, snapCli, snapRpi, snapGru, snapMensal] = await Promise.all([
@@ -327,7 +369,7 @@
                     let st = String(dat.status_cliente || '').toUpperCase();
                     if (st.includes('QUITADO') || st.includes('PAGANTE')) quitados++;
                     if (st.includes('INADIMPLENTE') || st.includes('CANCELADO') || st.includes('NEGATIVADO')) inadimplentes++;
-                    ultimosClientes.push({ cliente: dat.cliente, marca: dat.empresa || dat.marca, status: dat.status_cliente || 'QUITADO', valor: dat.valor_pc || 0 });
+                    ultimosClientes.push({ cliente: dat.cliente, marca: dat.empresa || dat.marca, status: dat.status_cliente || 'QUITADO', valor: dat.valor_pc || 0, telefone: dat.telefone || '' });
                 });
 
                 document.getElementById('dashCardTotalClientes').innerText = totalCli;
@@ -355,6 +397,61 @@
                     `;
                 });
 
+                // Renderizar Gráficos Chart.js
+                if (chartStatusInstance) chartStatusInstance.destroy();
+                const ctxStatus = document.getElementById('chartStatusClientes').getContext('2d');
+                chartStatusInstance = new Chart(ctxStatus, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Quitados / Pagantes', 'Inadimplentes / Outros'],
+                        datasets: [{
+                            data: [quitados, Math.max(0, totalCli - quitados)],
+                            backgroundColor: ['#10B981', '#F59E0B'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom', labels: { color: '#94A3B8', font: { size: 10 } } } }
+                    }
+                });
+
+                let contFasesMap = {};
+                snapRpi.forEach(d => {
+                    let f = (d.data().fase || 'GERAL').trim().toUpperCase();
+                    if(f.includes('DEFERIMENTO')) f = 'DEFERIMENTO';
+                    else if(f.includes('OPOSIÇÃO')) f = 'OPOSIÇÃO';
+                    else if(f.includes('CONCESSÃO')) f = 'CONCESSÃO';
+                    else if(f.includes('EXAME')) f = 'EXAME';
+                    else f = 'OUTROS';
+                    contFasesMap[f] = (contFasesMap[f] || 0) + 1;
+                });
+
+                if (chartFasesInstance) chartFasesInstance.destroy();
+                const ctxFases = document.getElementById('chartFasesRpi').getContext('2d');
+                chartFasesInstance = new Chart(ctxFases, {
+                    type: 'bar',
+                    data: {
+                        labels: Object.keys(contFasesMap),
+                        datasets: [{
+                            label: 'Processos',
+                            data: Object.values(contFasesMap),
+                            backgroundColor: '#D4AF37',
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { color: '#94A3B8', font: { size: 9 } }, grid: { display: false } },
+                            y: { ticks: { color: '#94A3B8', font: { size: 9 } }, grid: { color: '#172A45' } }
+                        }
+                    }
+                });
+
             } catch (e) { console.error("Erro ao carregar dashboard:", e); }
         }
 
@@ -376,7 +473,7 @@
 
                 if (querySnapshot.empty) {
                     tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro para o dia ${dia}.</td></tr>`;
-                    atualizarCards(0, 0, 0);
+                    atualizarCardsCobrancas(0, 0, 0);
                     return;
                 }
 
@@ -389,7 +486,7 @@
                 });
 
                 renderizarTabelaCobrancas(cacheCobrancas);
-                atualizarCards(totalGeral, totalPago, count);
+                atualizarCardsCobrancas(totalGeral, totalPago, count);
             } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-rose-400 text-xs">Erro ao carregar.</td></tr>`; }
         }
 
@@ -455,6 +552,7 @@
                     valor_total: valor, quantidade_parcelas: parcelas, parcelas_pagas: pagas,
                     valor_pago: valorPago, status_pagamento: status
                 });
+                await registrarLog(`Cobrança cadastrada para ${cliente}`);
                 alert("Cobrança cadastrada com sucesso!");
                 fecharModalCobranca();
                 document.getElementById('formCobrancaManual').reset();
@@ -466,11 +564,11 @@
             if (!confirm("Deseja realmente excluir esta cobrança?")) return;
             try {
                 await deleteDoc(doc(db, "cobrancas", docId));
+                await registrarLog(`Cobrança excluída ID: ${docId}`);
                 carregarCobrancas(cicloAtual);
             } catch (e) { alert("Erro ao excluir."); }
         }
 
-        // --- GERADOR DE RELATÓRIOS ---
         window.gerarRelatorioCobrancas = function() {
             let janela = window.open('', '_blank');
             if (!janela) { alert("Permita pop-ups no navegador para gerar o relatório."); return; }
@@ -499,17 +597,18 @@
             let novoStatus = novasPagas >= totalParcelas ? 'pago' : 'pendente';
             try {
                 await updateDoc(doc(db, "cobrancas", docId), { parcelas_pagas: novasPagas, valor_pago: novoValorPago, status_pagamento: novoStatus });
+                await registrarLog(`Parcelas atualizadas ID: ${docId} para ${novasPagas}/${totalParcelas}`);
                 carregarCobrancas(cicloAtual);
             } catch (err) { alert("Erro ao atualizar."); }
         }
 
-        function atualizarCards(total, pago, qtd) {
+        function atualizarCardsCobrancas(total, pago, qtd) {
             document.getElementById('totalPrevisto').innerText = `R$ ${total.toFixed(2)}`;
             document.getElementById('totalArrecadado').innerText = `R$ ${pago.toFixed(2)}`;
             document.getElementById('totalClientes').innerText = qtd;
         }
 
-        // --- MÓDULO CLIENTES ---
+        // --- MÓDULO CLIENTES (COM WHATSAPP) ---
         let cacheClientes = [];
         window.carregarClientes = async function() {
             const tabela = document.getElementById('tabelaClientes');
@@ -555,7 +654,10 @@
                     <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
                         <td class="px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td>
                         <td class="px-6 py-3.5 text-xs text-slate-400">${data.empresa || data.marca || ''}</td>
-                        <td class="px-6 py-3.5 text-xs text-slate-400">${data.telefone || ''}</td>
+                        <td class="px-6 py-3.5 text-xs text-slate-400 flex items-center gap-1.5">
+                            ${data.telefone || ''}
+                            ${data.telefone ? `<button onclick="enviarWhatsApp('${data.telefone}', \`${data.cliente || ''}\`, \`${data.empresa || data.marca || ''}\`)" title="Enviar WhatsApp" class="text-emerald-400 hover:text-emerald-300 font-bold text-xs bg-emerald-500/10 p-1 rounded">💬</button>` : ''}
+                        </td>
                         <td class="px-6 py-3.5 text-xs text-slate-200 font-semibold">R$ ${Number(data.valor_pc || 0).toFixed(2)}</td>
                         <td class="px-6 py-3.5 text-xs">${badgeStatus}</td>
                         <td class="px-6 py-3.5 text-xs text-slate-400">${data.anuidade || '-'}</td>
@@ -603,8 +705,10 @@
             try {
                 if (docId) {
                     await updateDoc(doc(db, "clientes", docId), { cliente, empresa, marca: empresa, telefone, valor_pc, status_cliente, anuidade });
+                    await registrarLog(`Cliente atualizado: ${cliente}`);
                 } else {
                     await addDoc(collection(db, "clientes"), { cliente, empresa, marca: empresa, telefone, valor_pc, status_cliente, anuidade });
+                    await registrarLog(`Novo cliente cadastrado: ${cliente}`);
                 }
                 alert("Salvo com sucesso!");
                 fecharModalCliente();
@@ -614,7 +718,11 @@
 
         window.excluirCliente = async function(docId) {
             if (!confirm("Tem certeza que deseja excluir?")) return;
-            try { await deleteDoc(doc(db, "clientes", docId)); carregarClientes(); } catch (e) { alert("Erro."); }
+            try { 
+                await deleteDoc(doc(db, "clientes", docId)); 
+                await registrarLog(`Cliente excluído ID: ${docId}`);
+                carregarClientes(); 
+            } catch (e) { alert("Erro."); }
         }
 
         window.filtrarClientes = function() {
@@ -644,7 +752,7 @@
             document.getElementById('dashInadimplentes').innerText = inadimplentes;
         }
 
-        // --- MÓDULO RPI ---
+        // --- MÓDULO RPI (COM ALERTAS DE PRAZO CRÍTICO) ---
         window.carregarRPI = async function() {
             const tabela = document.getElementById('tabelaRPI');
             tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando RPI...</td></tr>`;
@@ -680,10 +788,11 @@
             fasesDesejadas.forEach(faseNome => {
                 let qtd = 0;
                 Object.keys(contFases).forEach(f => { if (f.includes(faseNome)) qtd += contFases[f]; });
+                let corAlerta = (faseNome === 'OPOSIÇÃO' || faseNome === 'INDEFERIMENTO') ? 'border-amber-500/50 text-amber-400' : 'text-brand-gold';
                 container.innerHTML += `
                     <button onclick="filtrarRPI('${faseNome}')" class="p-4 bg-brand-card text-white rounded-xl shadow-sm border border-brand-border text-left font-medium hover:border-brand-gold transition-all">
-                        <p class="text-[9px] uppercase tracking-widest text-slate-400 truncate font-medium">${faseNome}</p>
-                        <p class="text-xl font-bold text-brand-gold mt-1">${qtd}</p>
+                        <p class="text-[9px] uppercase tracking-widest text-slate-400 truncate font-medium">${faseNome} ${(faseNome === 'OPOSIÇÃO') ? '⚠️' : ''}</p>
+                        <p class="text-xl font-bold ${corAlerta} mt-1">${qtd}</p>
                     </button>
                 `;
             });
@@ -700,11 +809,15 @@
             if (filtrados.length === 0) { tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum processo encontrado.</td></tr>`; return; }
             let html = '';
             filtrados.slice(0, 500).forEach(data => {
+                let badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+                if (data.fase.includes('OPOSIÇÃO') || data.fase.includes('INDEFERIMENTO')) {
+                    badgeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/20 font-bold';
+                }
                 html += `
                     <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
                         <td class="px-6 py-3.5 text-xs font-mono text-slate-300 font-medium">${data.processo || ''}</td>
                         <td class="px-6 py-3.5 text-xs text-slate-200 font-medium">${data.marca || ''}</td>
-                        <td class="px-6 py-3.5 text-xs"><span class="px-2.5 py-1 text-[10px] font-semibold bg-blue-500/10 text-blue-400 rounded-md border border-blue-500/20">${data.fase}</span></td>
+                        <td class="px-6 py-3.5 text-xs"><span class="px-2.5 py-1 text-[10px] rounded-md border ${badgeClass}">${data.fase}</span></td>
                     </tr>
                 `;
             });
@@ -770,13 +883,21 @@
 
         window.alternarStatusGRU = async function(docId, statusAtual) {
             let novoStatus = statusAtual === 'pago' ? 'pendente' : 'pago';
-            try { await updateDoc(doc(db, "gru", docId), { status_pagamento: novoStatus }); carregarGRU(); } catch (e) { alert("Erro."); }
+            try { 
+                await updateDoc(doc(db, "gru", docId), { status_pagamento: novoStatus }); 
+                await registrarLog(`Status GRU alterado para ${novoStatus}`);
+                carregarGRU(); 
+            } catch (e) { alert("Erro."); }
         }
 
         window.editarAnotacaoGRU = async function(docId, anotacaoAtual) {
             let novaAnotacao = prompt("Digite a anotação/situação:", anotacaoAtual);
             if (novaAnotacao === null) return;
-            try { await updateDoc(doc(db, "gru", docId), { anotacoes: novaAnotacao.trim() }); carregarGRU(); } catch (e) { alert("Erro."); }
+            try { 
+                await updateDoc(doc(db, "gru", docId), { anotacoes: novaAnotacao.trim() }); 
+                await registrarLog(`Anotação GRU atualizada`);
+                carregarGRU(); 
+            } catch (e) { alert("Erro."); }
         }
 
         window.filtrarGRU = function() {
@@ -847,15 +968,15 @@
             janela.document.close();
         }
 
-        // --- ADMIN ---
-        window.carregarUsuariosAdmin = async function() {
+        // --- ADMIN & TRILHA DE AUDITORIA ---
+        window.carregarPainelAdmin = async function() {
             const container = document.getElementById('listaUsuariosAdmin');
             container.innerHTML = `
                 <div class="bg-brand-card p-6 rounded-2xl border border-brand-border shadow-sm mb-6">
                     <h3 class="text-base font-bold text-white">Painel de Controle do Administrador</h3>
-                    <p class="text-slate-400 mt-1 text-xs">Gerencie acessos, bloqueios e permissões de usuários.</p>
+                    <p class="text-slate-400 mt-1 text-xs">Gerencie acessos, bloqueios, permissões e consulte a trilha de auditoria do sistema.</p>
                 </div>
-                <div class="bg-brand-card rounded-2xl shadow-sm border border-brand-border overflow-hidden">
+                <div class="bg-brand-card rounded-2xl shadow-sm border border-brand-border overflow-hidden mb-8">
                     <div class="p-5 border-b border-brand-border"><h4 class="font-bold text-white text-sm">Controle de Acessos</h4></div>
                     <table class="min-w-full divide-y divide-brand-border">
                         <thead class="bg-[#132238]">
@@ -870,31 +991,70 @@
                         <tbody id="tabelaUsuariosCadastrados" class="divide-y divide-brand-border/40"><tr><td colspan="5" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando...</td></tr></tbody>
                     </table>
                 </div>
+
+                <div class="bg-brand-card rounded-2xl shadow-sm border border-brand-border overflow-hidden">
+                    <div class="p-5 border-b border-brand-border flex justify-between items-center">
+                        <h4 class="font-bold text-white text-sm">🕵️ Trilha de Auditoria (Logs de Atividades)</h4>
+                    </div>
+                    <table class="min-w-full divide-y divide-brand-border">
+                        <thead class="bg-[#132238]">
+                            <tr>
+                                <th class="px-6 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">Data / Hora</th>
+                                <th class="px-6 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">Usuário</th>
+                                <th class="px-6 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">Ação Realizada</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaAuditLogs" class="divide-y divide-brand-border/40"><tr><td colspan="3" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando logs...</td></tr></tbody>
+                    </table>
+                </div>
             `;
             try {
-                const querySnapshot = await getDocs(collection(db, "usuarios_cadastrados"));
+                const [snapUsers, snapLogs] = await Promise.all([
+                    getDocs(collection(db, "usuarios_cadastrados")),
+                    getDocs(collection(db, "audit_logs"))
+                ]);
+
                 const tbody = document.getElementById('tabelaUsuariosCadastrados');
                 tbody.innerHTML = '';
-                if (querySnapshot.empty) { tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum usuário.</td></tr>`; return; }
-                querySnapshot.forEach((docSnap) => {
-                    const data = docSnap.data();
-                    const docId = docSnap.id;
-                    const status = data.status || 'ativo';
-                    const badge = status === 'ativo' ? '<span class="px-2.5 py-1 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 rounded-md border border-emerald-500/20">ATIVO</span>' : '<span class="px-2.5 py-1 text-[10px] font-semibold bg-rose-500/10 text-rose-400 rounded-md border border-rose-500/20">BLOQUEADO</span>';
-                    tbody.innerHTML += `
-                        <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
-                            <td class="px-6 py-3.5 text-xs text-slate-200 font-medium">${data.nome || '-'}</td>
-                            <td class="px-6 py-3.5 text-xs text-slate-400">${data.email || ''}</td>
-                            <td class="px-6 py-3.5 text-xs text-slate-400">${data.criado_em || '-'}</td>
-                            <td class="px-6 py-3.5 text-xs">${badge}</td>
-                            <td class="px-6 py-3.5 text-xs text-right space-x-2">
-                                <button onclick="editarNomeUsuario('${docId}', '${data.nome || ''}')" class="px-2.5 py-1 bg-[#132238] hover:bg-brand-gold hover:text-brand-dark text-slate-300 text-[11px] font-medium rounded-lg border border-brand-border transition-all">Editar</button>
-                                <button onclick="alternarStatusUsuario('${docId}', '${status}')" class="px-2.5 py-1 ${status === 'ativo' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500 hover:text-white' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white'} text-[11px] font-medium rounded-lg transition-all">${status === 'ativo' ? 'Bloquear' : 'Ativar'}</button>
-                                <button onclick="excluirUsuarioAdmin('${docId}')" class="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-[11px] font-medium rounded-lg transition-all border border-rose-500/20">Excluir</button>
-                            </td>
-                        </tr>
-                    `;
-                });
+                if (snapUsers.empty) { tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum usuário.</td></tr>`; }
+                else {
+                    snapUsers.forEach((docSnap) => {
+                        const data = docSnap.data();
+                        const docId = docSnap.id;
+                        const status = data.status || 'ativo';
+                        const badge = status === 'ativo' ? '<span class="px-2.5 py-1 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 rounded-md border border-emerald-500/20">ATIVO</span>' : '<span class="px-2.5 py-1 text-[10px] font-semibold bg-rose-500/10 text-rose-400 rounded-md border border-rose-500/20">BLOQUEADO</span>';
+                        tbody.innerHTML += `
+                            <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
+                                <td class="px-6 py-3.5 text-xs text-slate-200 font-medium">${data.nome || '-'}</td>
+                                <td class="px-6 py-3.5 text-xs text-slate-400">${data.email || ''}</td>
+                                <td class="px-6 py-3.5 text-xs text-slate-400">${data.criado_em || '-'}</td>
+                                <td class="px-6 py-3.5 text-xs">${badge}</td>
+                                <td class="px-6 py-3.5 text-xs text-right space-x-2">
+                                    <button onclick="editarNomeUsuario('${docId}', '${data.nome || ''}')" class="px-2.5 py-1 bg-[#132238] hover:bg-brand-gold hover:text-brand-dark text-slate-300 text-[11px] font-medium rounded-lg border border-brand-border transition-all">Editar</button>
+                                    <button onclick="alternarStatusUsuario('${docId}', '${status}')" class="px-2.5 py-1 ${status === 'ativo' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500 hover:text-white' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white'} text-[11px] font-medium rounded-lg transition-all">${status === 'ativo' ? 'Bloquear' : 'Ativar'}</button>
+                                    <button onclick="excluirUsuarioAdmin('${docId}')" class="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-[11px] font-medium rounded-lg transition-all border border-rose-500/20">Excluir</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                const tbodyLogs = document.getElementById('tabelaAuditLogs');
+                tbodyLogs.innerHTML = '';
+                if (snapLogs.empty) { tbodyLogs.innerHTML = `<tr><td colspan="3" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum log registrado.</td></tr>`; }
+                else {
+                    let logsArr = [];
+                    snapLogs.forEach(d => logsArr.push(d.data()));
+                    logsArr.slice(-20).reverse().forEach(log => {
+                        tbodyLogs.innerHTML += `
+                            <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
+                                <td class="px-6 py-3.5 text-xs font-mono text-slate-400">${log.data || '-'}</td>
+                                <td class="px-6 py-3.5 text-xs text-brand-gold font-medium">${log.usuario || '-'}</td>
+                                <td class="px-6 py-3.5 text-xs text-slate-200">${log.acao || '-'}</td>
+                            </tr>
+                        `;
+                    });
+                }
             } catch (err) { console.error(err); }
         }
 
@@ -902,19 +1062,22 @@
             let novo = prompt("Novo nome:", nomeAtual);
             if (!novo) return;
             await updateDoc(doc(db, "usuarios_cadastrados", docId), { nome: novo.trim() });
-            carregarUsuariosAdmin();
+            await registrarLog(`Nome de usuário atualizado ID: ${docId}`);
+            carregarPainelAdmin();
         }
 
         window.alternarStatusUsuario = async function(docId, statusAtual) {
             let novo = statusAtual === 'ativo' ? 'bloqueado' : 'ativo';
             await updateDoc(doc(db, "usuarios_cadastrados", docId), { status: novo });
-            carregarUsuariosAdmin();
+            await registrarLog(`Status de acesso alterado para ${novo} (ID: ${docId})`);
+            carregarPainelAdmin();
         }
 
         window.excluirUsuarioAdmin = async function(docId) {
             if (!confirm("Remover acesso?")) return;
             await deleteDoc(doc(db, "usuarios_cadastrados", docId));
-            carregarUsuariosAdmin();
+            await registrarLog(`Usuário removido ID: ${docId}`);
+            carregarPainelAdmin();
         }
 
         // --- IMPORTADOR UNIVERSAL OTIMIZADO COM BATCH WRITES ---
@@ -979,6 +1142,7 @@
                             }
                         }
                         await executarEmLotes("cobrancas", itensCobranca, (d) => `${String(d.cliente_id || '').trim()}_${d.dia_vencimento}_${String(d.marca || '').trim()}`.toUpperCase());
+                        await registrarLog("Planilha de Cobranças importada via Excel");
                         carregarCobrancas(cicloAtual);
                     }
 
@@ -1013,6 +1177,7 @@
                             }
                         }
                         await executarEmLotes("clientes", itensClientes, (d) => `${String(d.cliente || '').trim()}_${String(d.empresa || d.marca || '').trim()}`.toUpperCase());
+                        await registrarLog("Planilha Base Marcas importada via Excel");
                         carregarClientes();
                     }
 
@@ -1033,6 +1198,7 @@
                             }
                         }
                         await executarEmLotes("rpi_marcas", itensRpi, (d) => String(d.processo || '').trim());
+                        await registrarLog("Revistas RPI importadas via Excel");
                         carregarRPI();
                     }
 
@@ -1050,6 +1216,7 @@
                             }
                         }
                         await executarEmLotes("gru", itensGru, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.vencimento || '').trim()}`.toUpperCase());
+                        await registrarLog("Planilha GRU importada via Excel");
                         carregarGRU();
                     }
 
@@ -1075,6 +1242,7 @@
                             }
                         }
                         await executarEmLotes("mensal", itensMensal, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.data_pagamento || '').trim()}`.toUpperCase());
+                        await registrarLog("Base Administrativa importada via Excel");
                         carregarMensal();
                     }
 
@@ -1097,7 +1265,6 @@
         <div class="bg-brand-card rounded-3xl shadow-2xl p-8 max-w-sm w-full border border-brand-border text-center relative overflow-hidden backdrop-blur-xl">
             <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-transparent via-brand-gold to-transparent"></div>
             
-            <!-- Logo com animação fluida de movimento -->
             <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Logo" class="w-16 h-16 rounded-2xl object-cover shadow-lg border border-brand-gold/50 mx-auto mb-3 animate-logo-float">
             
             <h2 class="text-xl font-extrabold text-white tracking-tight">KRONOS GS</h2>
@@ -1162,7 +1329,6 @@
         <!-- MENU LATERAL COMPACTO E ELEGANTE (w-60) -->
         <aside class="w-60 bg-brand-card text-white h-screen flex flex-col fixed inset-y-0 left-0 shadow-2xl z-20 border-r border-brand-border">
             <div class="p-4 border-b border-brand-border flex items-center gap-3 bg-brand-dark">
-                <!-- Logo com animação no menu lateral -->
                 <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Logo" class="w-10 h-10 rounded-xl object-cover shadow border border-brand-gold/50 animate-logo-float">
                 <div>
                     <h1 class="text-sm font-black tracking-wider text-white">KRONOS GS</h1>
@@ -1238,7 +1404,7 @@
                                 <input type="text" id="cliEmpresa" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold" required>
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-400 uppercase">Tel.</label>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase">Tel. / WhatsApp</label>
                                 <input type="text" id="cliTelefone" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold">
                             </div>
                         </div>
@@ -1317,7 +1483,7 @@
                 </div>
             </div>
 
-            <!-- ABA 0: DASHBOARD GERAL -->
+            <!-- ABA 0: DASHBOARD GERAL COM GRÁFICOS -->
             <div id="aba-dashboard" class="aba-conteudo block">
                 <div class="flex justify-between items-center mb-6">
                     <div>
@@ -1359,6 +1525,22 @@
                         <div class="absolute top-0 right-0 p-3 text-blue-400 opacity-10 text-3xl">📖</div>
                         <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Processos INPI (RPI)</p>
                         <p id="dashCardRpi" class="text-xl font-black text-blue-400 mt-1.5">0</p>
+                    </div>
+                </div>
+
+                <!-- GRÁFICOS INTERATIVOS -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+                    <div class="bg-brand-card p-5 rounded-2xl border border-brand-border shadow-sm">
+                        <h3 class="font-bold text-white text-xs uppercase tracking-wider mb-4">Status da Carteira de Clientes</h3>
+                        <div class="h-60 relative flex justify-center items-center">
+                            <canvas id="chartStatusClientes"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-brand-card p-5 rounded-2xl border border-brand-border shadow-sm">
+                        <h3 class="font-bold text-white text-xs uppercase tracking-wider mb-4">Distribuição de Fases dos Processos (RPI)</h3>
+                        <div class="h-60 relative flex justify-center items-center">
+                            <canvas id="chartFasesRpi"></canvas>
+                        </div>
                     </div>
                 </div>
 
@@ -1415,9 +1597,10 @@
                         <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-brand-card text-slate-300 border border-brand-border rounded-xl font-medium hover:bg-brand-border text-xs">Ciclo Dia 20</button>
                     </div>
                     <div class="flex flex-wrap items-center gap-2.5">
-                        <input type="text" id="buscaCobrancas" onkeyup="filtrarCobrancas()" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-56">
+                        <input type="text" id="buscaCobrancas" onkeyup="filtrarCobrancas()" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-44">
                         <button onclick="abrirModalCobranca()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow">+ Novo</button>
                         <button onclick="gerarRelatorioCobrancas()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">Relatório PDF</button>
+                        <button onclick="exportarParaExcel('Faturamento_Ciclo_' + cicloAtual, cacheCobrancas)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Exportar Excel</button>
                         <input type="file" id="upCobrancas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'cobrancas')" />
                         <label for="upCobrancas" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs">
                             <span id="upCobrancasText">Importar Excel</span>
@@ -1443,7 +1626,7 @@
                 </div>
             </div>
 
-            <!-- ABA 2: BASE MARCAS -->
+            <!-- ABA 2: BASE MARCAS (COM WHATSAPP) -->
             <div id="aba-clientes" class="aba-conteudo hidden">
                 <div class="flex justify-between items-center mb-6">
                     <div>
@@ -1451,9 +1634,10 @@
                         <p class="text-slate-400 text-xs mt-0.5">Gestão de Empresas, Clientes, Telefones, Valores e Status.</p>
                     </div>
                     <div class="flex items-center gap-2.5">
-                        <input type="text" id="buscaClientes" onkeyup="filtrarClientes()" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-card text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-56">
+                        <input type="text" id="buscaClientes" onkeyup="filtrarClientes()" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-card text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-44">
                         <button onclick="abrirModalCliente()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow">+ Novo</button>
                         <button onclick="gerarRelatorioClientes()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">Relatório PDF</button>
+                        <button onclick="exportarParaExcel('Base_Marcas_Financeiro', cacheClientes)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Exportar Excel</button>
                         <input type="file" id="upClientes" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'clientes')" />
                         <label for="upClientes" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs">
                             <span id="upClientesText">Importar Excel</span>
@@ -1482,7 +1666,7 @@
                             <tr>
                                 <th class="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
                                 <th class="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Empresa</th>
-                                <th class="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tel.</th>
+                                <th class="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tel. / WhatsApp</th>
                                 <th class="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Valor Pc</th>
                                 <th class="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
                                 <th class="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Anuidade</th>
@@ -1499,11 +1683,12 @@
                 <div class="flex justify-between items-center mb-6">
                     <div>
                         <h2 class="text-xl font-extrabold text-white tracking-tight">Monitoramento INPI (RPI)</h2>
-                        <p class="text-slate-400 text-xs mt-0.5">Filtre processos por fase.</p>
+                        <p class="text-slate-400 text-xs mt-0.5">Filtre processos por fase e acompanhe prazos críticos.</p>
                     </div>
                     <div class="flex items-center gap-2.5">
-                        <input type="text" id="buscaRPI" onkeyup="filtrarRPI('TODOS')" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-card text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-56">
+                        <input type="text" id="buscaRPI" onkeyup="filtrarRPI('TODOS')" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-card text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-44">
                         <button onclick="gerarRelatorioRPI()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">Relatório PDF</button>
+                        <button onclick="exportarParaExcel('Revistas_RPI', rpiCache)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Exportar Excel</button>
                         <input type="file" id="upRpi" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'rpi')" />
                         <label for="upRpi" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs">
                             <span id="upRpiText">Importar Excel</span>
@@ -1535,8 +1720,9 @@
                         <p class="text-slate-400 text-xs mt-0.5">Controle de pagamentos, vencimentos e anotações.</p>
                     </div>
                     <div class="flex items-center gap-2.5">
-                        <input type="text" id="buscaGRU" onkeyup="filtrarGRU()" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-card text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-56">
+                        <input type="text" id="buscaGRU" onkeyup="filtrarGRU()" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-card text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-44">
                         <button onclick="gerarRelatorioGRU()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">Relatório PDF</button>
+                        <button onclick="exportarParaExcel('Guias_GRU', cacheGRU)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Exportar Excel</button>
                         <input type="file" id="upGru" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'gru')" />
                         <label for="upGru" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs">
                             <span id="upGruText">Importar Excel</span>
@@ -1567,8 +1753,9 @@
                         <p class="text-slate-400 text-xs mt-0.5">Contratos e relatórios financeiros.</p>
                     </div>
                     <div class="flex items-center gap-2.5">
-                        <input type="text" id="buscaMensal" onkeyup="filtrarMensal()" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-card text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-56">
+                        <input type="text" id="buscaMensal" onkeyup="filtrarMensal()" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-card text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-44">
                         <button onclick="gerarRelatorioMensal()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">Relatório PDF</button>
+                        <button onclick="exportarParaExcel('Base_Administrativo', cacheMensal)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Exportar Excel</button>
                         <input type="file" id="upMensal" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'mensal')" />
                         <label for="upMensal" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs">
                             <span id="upMensalText">Importar Excel</span>
@@ -1591,7 +1778,7 @@
                 </div>
             </div>
 
-            <!-- ABA EXCLUSIVA ADMIN -->
+            <!-- ABA EXCLUSIVA ADMIN (COM AUDITORIA) -->
             <div id="aba-admin" class="aba-conteudo hidden">
                 <div id="listaUsuariosAdmin"></div>
             </div>
