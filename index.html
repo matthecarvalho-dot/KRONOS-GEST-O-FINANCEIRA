@@ -25,22 +25,19 @@
       window.addEventListener('beforeinstallprompt', (e) => {
           e.preventDefault();
           deferredPrompt = e;
-          const btnInstalar = document.getElementById('btn-instalar-app');
-          if (btnInstalar) btnInstalar.classList.remove('hidden');
       });
 
       window.instalarApp = async function() {
-          if (!deferredPrompt) {
-              alert("Para instalar no celular, toque no menu do seu navegador (três pontos no canto superior) e selecione 'Adicionar à tela inicial' ou 'Instalar aplicativo'.");
-              return;
+          if (deferredPrompt) {
+              deferredPrompt.prompt();
+              const { outcome } = await deferredPrompt.userChoice;
+              if (outcome === 'accepted') {
+                  console.log('Aplicativo instalado com sucesso!');
+              }
+              deferredPrompt = null;
+          } else {
+              alert("Como instalar o Kronos GS:\n\n• No Computador (Chrome / Edge):\nClique no ícone de instalação (um monitor com uma seta) na barra de endereços (canto superior direito) ou clique nos 3 pontinhos do navegador e selecione 'Instalar Kronos GS'.\n\n• No Celular:\nToque no menu do navegador (3 pontinhos) e selecione 'Adicionar à tela inicial' ou 'Instalar aplicativo'.");
           }
-          deferredPrompt.prompt();
-          const { outcome } = await deferredPrompt.userChoice;
-          if (outcome === 'accepted') {
-              console.log('Aplicativo instalado com sucesso!');
-          }
-          deferredPrompt = null;
-          document.getElementById('btn-instalar-app').classList.add('hidden');
       };
     </script>
     
@@ -1159,10 +1156,10 @@
                 </button>
             </nav>
 
-            <!-- RODAPÉ DO MENU COM BOTÃO DE INSTALAÇÃO, USUÁRIO E LOGOUT -->
+            <!-- RODAPÉ DO MENU COM BOTÃO DE INSTALAÇÃO SEMPRE VISÍVEL -->
             <div class="p-3 space-y-2 bg-brand-dark border-t border-brand-border">
-                <!-- Botão de Instalação Dinâmico -->
-                <button id="btn-instalar-app" onclick="instalarApp()" class="hidden w-full py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark text-[11px] font-extrabold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md">
+                <!-- Botão de Instalação Permanente -->
+                <button onclick="instalarApp()" class="w-full py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark text-[11px] font-extrabold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md">
                     <span>📱</span> Instalar Aplicativo
                 </button>
 
@@ -1547,7 +1544,7 @@
                                 <th class="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Data</th>
                                 <th class="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Valor</th>
                                 <th class="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                            </tr>
+                    </tr>
                         </thead>
                         <tbody id="tabelaMensal" class="divide-y divide-brand-border/40"></tbody>
                     </table>
