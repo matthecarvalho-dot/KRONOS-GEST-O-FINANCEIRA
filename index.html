@@ -29,6 +29,21 @@
         .animate-fade-in {
             animation: fadeInSlide 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
+
+        /* Animação de Flutuação e Brilho para a Logomarca */
+        @keyframes logoFloat {
+            0%, 100% {
+                transform: translateY(0px) scale(1);
+                box-shadow: 0 0 12px rgba(212, 175, 55, 0.25);
+            }
+            50% {
+                transform: translateY(-5px) scale(1.03);
+                box-shadow: 0 0 22px rgba(212, 175, 55, 0.55);
+            }
+        }
+        .animate-logo-float {
+            animation: logoFloat 3.5s ease-in-out infinite;
+        }
     </style>
 
     <script>
@@ -1081,7 +1096,9 @@
         <div class="bg-brand-card rounded-3xl shadow-2xl p-8 max-w-sm w-full border border-brand-border text-center relative overflow-hidden backdrop-blur-xl">
             <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-transparent via-brand-gold to-transparent"></div>
             
-            <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Logo" class="w-16 h-16 rounded-2xl object-cover shadow-lg border border-brand-gold/40 mx-auto mb-3">
+            <!-- Logo com animação de flutuação e brilho -->
+            <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Logo" class="w-16 h-16 rounded-2xl object-cover shadow-lg border border-brand-gold/50 mx-auto mb-3 animate-logo-float">
+            
             <h2 class="text-xl font-extrabold text-white tracking-tight">KRONOS GS</h2>
             <p class="text-brand-gold text-[9px] uppercase tracking-[0.3em] font-bold mt-0.5">ERP Executive Suite</p>
             
@@ -1144,7 +1161,8 @@
         <!-- MENU LATERAL COMPACTO E ELEGANTE (w-60) -->
         <aside class="w-60 bg-brand-card text-white h-screen flex flex-col fixed inset-y-0 left-0 shadow-2xl z-20 border-r border-brand-border">
             <div class="p-4 border-b border-brand-border flex items-center gap-3 bg-brand-dark">
-                <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Logo" class="w-10 h-10 rounded-xl object-cover shadow border border-brand-gold/40">
+                <!-- Logo com animação no menu lateral -->
+                <img src="https://i.imgur.com/NZyhksv.jpeg" alt="Logo" class="w-10 h-10 rounded-xl object-cover shadow border border-brand-gold/50 animate-logo-float">
                 <div>
                     <h1 class="text-sm font-black tracking-wider text-white">KRONOS GS</h1>
                     <p class="text-[8px] text-brand-gold uppercase tracking-[0.2em] font-bold">Executive</p>
