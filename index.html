@@ -127,9 +127,15 @@
 
         const EMAIL_ADMIN = "matthecarvalho@gmail.com";
         let cicloAtual = 5;
-        let rpiCache = [];
         let chartStatusInstance = null;
         let chartFasesInstance = null;
+
+        // Variaveis Globais de Cache
+        let cacheCobrancas = [];
+        let cacheClientes = [];
+        let rpiCache = [];
+        let cacheGRU = [];
+        let cacheMensal = [];
 
         window.registrarLog = async function(acaoDescricao) {
             try {
@@ -363,18 +369,22 @@
                     getDocs(collection(db, "mensal"))
                 ]);
 
+                cacheCobrancas = [];
                 let totalPrevisto = 0, totalPago = 0, totalCob = 0;
                 snapCob.forEach(d => {
                     const dat = d.data();
+                    cacheCobrancas.push({ id: d.id, ...dat });
                     totalPrevisto += Number(dat.valor_total || 0);
                     totalPago += Number(dat.valor_pago || 0);
                     totalCob++;
                 });
 
+                cacheClientes = [];
                 let totalCli = 0, quitados = 0, inadimplentes = 0, valorTotalPc = 0;
                 let ultimosClientes = [];
                 snapCli.forEach(d => {
                     const dat = d.data();
+                    cacheClientes.push({ id: d.id, ...dat });
                     totalCli++;
                     valorTotalPc += Number(dat.valor_pc || 0);
                     let st = String(dat.status_cliente || '').toUpperCase();
@@ -383,6 +393,27 @@
                     ultimosClientes.push({ cliente: dat.cliente, marca: dat.empresa || dat.marca, status: dat.status_cliente || 'QUITADO', valor: dat.valor_pc || 0, telefone: dat.telefone || '' });
                 });
 
+                rpiCache = [];
+                let contFasesMap = {};
+                snapRpi.forEach(d => {
+                    const dat = d.data();
+                    let f = (dat.fase || 'GERAL').trim().toUpperCase();
+                    if(f.includes('DEFERIMENTO')) f = 'DEFERIMENTO';
+                    else if(f.includes('OPOSIÇÃO')) f = 'OPOSIÇÃO';
+                    else if(f.includes('CONCESSÃO')) f = 'CONCESSÃO';
+                    else if(f.includes('EXAME')) f = 'EXAME';
+                    else f = 'OUTROS';
+                    contFasesMap[f] = (contFasesMap[f] || 0) + 1;
+                    rpiCache.push({ id: d.id, processo: dat.processo, marca: dat.marca, fase: f });
+                });
+
+                cacheGRU = [];
+                snapGru.forEach(d => cacheGRU.push({ id: d.id, ...d.data() }));
+
+                cacheMensal = [];
+                snapMensal.forEach(d => cacheMensal.push({ id: d.id, ...d.data() }));
+
+                // Atualizando Cards Dashboard
                 document.getElementById('dashCardTotalClientes').innerText = totalCli;
                 document.getElementById('dashCardQuitados').innerText = quitados;
                 document.getElementById('dashCardInadimplentes').innerText = inadimplentes;
@@ -427,17 +458,6 @@
                     }
                 });
 
-                let contFasesMap = {};
-                snapRpi.forEach(d => {
-                    let f = (d.data().fase || 'GERAL').trim().toUpperCase();
-                    if(f.includes('DEFERIMENTO')) f = 'DEFERIMENTO';
-                    else if(f.includes('OPOSIÇÃO')) f = 'OPOSIÇÃO';
-                    else if(f.includes('CONCESSÃO')) f = 'CONCESSÃO';
-                    else if(f.includes('EXAME')) f = 'EXAME';
-                    else f = 'OUTROS';
-                    contFasesMap[f] = (contFasesMap[f] || 0) + 1;
-                });
-
                 if (chartFasesInstance) chartFasesInstance.destroy();
                 const ctxFases = document.getElementById('chartFasesRpi').getContext('2d');
                 chartFasesInstance = new Chart(ctxFases, {
@@ -465,7 +485,127 @@
             } catch (e) { console.error("Erro ao carregar dashboard:", e); }
         }
 
-        let cacheCobrancas = [];
+        /* ----- BUSCA GLOBAL UNIFICADA ----- */
+        window.executarBuscaGlobal = function() {
+            const termo = document.getElementById('inputBuscaGlobal').value.toLowerCase().trim();
+            const dropdown = document.getElementById('dropdownBuscaGlobal');
+            const conteudo = document.getElementById('conteudoBuscaGlobal');
+
+            if (termo.length < 2) {
+                dropdown.classList.add('hidden');
+                return;
+            }
+
+            dropdown.classList.remove('hidden');
+            let resultadosHTML = '';
+
+            // Busca em Clientes
+            const resClientes = cacheClientes.filter(c => 
+                String(c.cliente || '').toLowerCase().includes(termo) || 
+                String(c.empresa || c.marca || '').toLowerCase().includes(termo) ||
+                String(c.telefone || '').toLowerCase().includes(termo)
+            ).slice(0, 5);
+
+            if (resClientes.length > 0) {
+                resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Base Marcas (${resClientes.length})</div>`;
+                resClientes.forEach(c => {
+                    resultadosHTML += `
+                        <button onclick="irParaResultado('clientes')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group">
+                            <div>
+                                <p class="text-xs font-semibold text-white group-hover:text-brand-gold">${c.cliente}</p>
+                                <p class="text-[10px] text-slate-400">Marca: ${c.empresa || c.marca || '-'} | Status: ${c.status_cliente}</p>
+                            </div>
+                            <span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span>
+                        </button>
+                    `;
+                });
+            }
+
+            // Busca em RPI
+            const resRPI = rpiCache.filter(r => 
+                String(r.processo || '').toLowerCase().includes(termo) || 
+                String(r.marca || '').toLowerCase().includes(termo)
+            ).slice(0, 5);
+
+            if (resRPI.length > 0) {
+                resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Processos INPI (${resRPI.length})</div>`;
+                resRPI.forEach(r => {
+                    resultadosHTML += `
+                        <button onclick="irParaResultado('rpi')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group">
+                            <div>
+                                <p class="text-xs font-semibold text-blue-400">${r.processo}</p>
+                                <p class="text-[10px] text-slate-400">Marca: ${r.marca || '-'} | Fase: ${r.fase}</p>
+                            </div>
+                            <span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span>
+                        </button>
+                    `;
+                });
+            }
+
+            // Busca em Faturamento
+            const resCob = cacheCobrancas.filter(c => 
+                String(c.cliente_id || '').toLowerCase().includes(termo) || 
+                String(c.marca || '').toLowerCase().includes(termo) ||
+                String(c.cnpj || '').toLowerCase().includes(termo)
+            ).slice(0, 5);
+
+            if (resCob.length > 0) {
+                resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Faturamento (${resCob.length})</div>`;
+                resCob.forEach(c => {
+                    resultadosHTML += `
+                        <button onclick="irParaResultado('cobrancas')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group">
+                            <div>
+                                <p class="text-xs font-semibold text-emerald-400">R$ ${Number(c.valor_total || 0).toFixed(2)} - ${c.cliente_id}</p>
+                                <p class="text-[10px] text-slate-400">Marca: ${c.marca || '-'} | Vencimento: Dia ${c.dia_vencimento}</p>
+                            </div>
+                            <span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span>
+                        </button>
+                    `;
+                });
+            }
+
+            // Busca em GRU
+            const resGRU = cacheGRU.filter(c => 
+                String(c.cliente || '').toLowerCase().includes(termo) || 
+                String(c.marca || '').toLowerCase().includes(termo)
+            ).slice(0, 5);
+
+            if (resGRU.length > 0) {
+                resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Guias GRU (${resGRU.length})</div>`;
+                resGRU.forEach(c => {
+                    resultadosHTML += `
+                        <button onclick="irParaResultado('gru')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group">
+                            <div>
+                                <p class="text-xs font-semibold text-white group-hover:text-brand-gold">${c.cliente}</p>
+                                <p class="text-[10px] text-slate-400">Marca: ${c.marca || '-'} | Vencimento: ${c.vencimento}</p>
+                            </div>
+                            <span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span>
+                        </button>
+                    `;
+                });
+            }
+
+            if (resultadosHTML === '') {
+                resultadosHTML = `<p class="text-xs text-slate-400 text-center py-5">Nenhum registro encontrado para "${termo}".</p>`;
+            }
+
+            conteudo.innerHTML = resultadosHTML;
+        };
+
+        window.irParaResultado = function(abaId) {
+            document.getElementById('inputBuscaGlobal').value = '';
+            document.getElementById('dropdownBuscaGlobal').classList.add('hidden');
+            abrirAba(abaId);
+        };
+        
+        document.addEventListener('click', function(event) {
+            const searchContainer = document.getElementById('inputBuscaGlobal')?.parentElement;
+            if (searchContainer && !searchContainer.contains(event.target)) {
+                document.getElementById('dropdownBuscaGlobal')?.classList.add('hidden');
+            }
+        });
+        /* --------------------------------- */
+
         window.carregarCobrancas = async function(dia) {
             cicloAtual = dia;
             document.getElementById('btnDia5').className = dia === 5 ? 'px-4 py-2 bg-brand-gold text-brand-dark rounded-xl font-bold shadow-md text-xs transition-all' : 'px-4 py-2 bg-brand-card text-slate-300 border border-brand-border rounded-xl font-medium hover:bg-brand-border text-xs transition-all';
@@ -617,7 +757,6 @@
             document.getElementById('totalClientes').innerText = qtd;
         }
 
-        let cacheClientes = [];
         window.carregarClientes = async function() {
             const tabela = document.getElementById('tabelaClientes');
             tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando base de marcas...</td></tr>`;
@@ -842,7 +981,6 @@
             janela.document.close();
         }
 
-        let cacheGRU = [];
         window.carregarGRU = async function() {
             const tabela = document.getElementById('tabelaGRU');
             tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando GRUs...</td></tr>`;
@@ -923,7 +1061,6 @@
             janela.document.close();
         }
 
-        let cacheMensal = [];
         window.carregarMensal = async function() {
             const tabela = document.getElementById('tabelaMensal');
             tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando...</td></tr>`;
@@ -1398,16 +1535,33 @@
             </div>
         </aside>
 
-        <!-- CONTEÚDO PRINCIPAL (COM BARRA SUPERIOR MOBILE) -->
+        <!-- CONTEÚDO PRINCIPAL (COM BARRA GLOBAL UNIFICADA) -->
         <main class="flex-1 w-full md:ml-60 bg-brand-dark min-h-screen flex flex-col">
 
-            <!-- BARRA SUPERIOR EXCLUSIVA PARA MOBILE -->
-            <header class="md:hidden bg-brand-card border-b border-brand-border px-4 py-3 flex items-center justify-between sticky top-0 z-30">
-                <div class="flex items-center gap-3">
+            <!-- BARRA SUPERIOR UNIFICADA COM BUSCA GLOBAL (DESKTOP E MOBILE) -->
+            <header class="bg-brand-card border-b border-brand-border px-4 py-3 flex flex-wrap md:flex-nowrap items-center justify-between sticky top-0 z-30 gap-3">
+                <!-- Controles Mobile -->
+                <div class="flex items-center gap-3 md:hidden">
                     <button onclick="toggleMenuMobile()" class="text-brand-gold text-xl font-bold p-1 bg-brand-dark px-2.5 py-1 rounded-lg border border-brand-border">☰</button>
                     <span class="font-extrabold text-white text-xs tracking-wider">KRONOS GS</span>
                 </div>
-                <span class="text-[8px] text-brand-gold uppercase font-bold tracking-widest px-2 py-1 bg-brand-dark rounded border border-brand-border">Executive</span>
+                
+                <!-- Input Busca Global -->
+                <div class="relative w-full md:max-w-2xl mx-auto md:ml-4">
+                    <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                        <span class="text-slate-400">🔍</span>
+                    </div>
+                    <input type="text" id="inputBuscaGlobal" onkeyup="executarBuscaGlobal()" placeholder="Busca Global: Cliente, Marca, Processo ou CNPJ..." class="w-full pl-9 pr-4 py-2 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold transition-all shadow-inner placeholder-slate-500">
+                    
+                    <!-- Dropdown Resultados -->
+                    <div id="dropdownBuscaGlobal" class="hidden absolute top-full left-0 mt-2 w-full max-h-[70vh] overflow-y-auto bg-brand-card border border-brand-border rounded-xl shadow-2xl z-50 divide-y divide-brand-border/50">
+                        <div id="conteudoBuscaGlobal" class="p-2 space-y-2"></div>
+                    </div>
+                </div>
+                
+                <div class="hidden md:block">
+                     <span class="text-[8px] text-brand-gold uppercase font-bold tracking-widest px-2 py-1 bg-brand-dark rounded border border-brand-border">Executive</span>
+                </div>
             </header>
 
             <div class="p-4 md:p-8 flex-1">
@@ -1623,7 +1777,7 @@
                             <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-brand-card text-slate-300 border border-brand-border rounded-xl font-medium hover:bg-brand-border text-xs">Ciclo Dia 20</button>
                         </div>
                         <div class="flex flex-wrap items-center gap-2">
-                            <input type="text" id="buscaCobrancas" onkeyup="filtrarCobrancas()" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-36 md:w-44">
+                            <input type="text" id="buscaCobrancas" onkeyup="filtrarCobrancas()" placeholder="🔍 Pesquisar aba..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-36 md:w-44">
                             <button onclick="abrirModalCobranca()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow">+ Novo</button>
                             <button onclick="gerarRelatorioCobrancas()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">PDF</button>
                             <button onclick="exportarParaExcel('Faturamento_Ciclo_' + cicloAtual, cacheCobrancas)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
@@ -1654,7 +1808,7 @@
                     </div>
                 </div>
 
-                <!-- ABA 2: BASE MARCAS (COM WHATSAPP) -->
+                <!-- ABA 2: BASE MARCAS -->
                 <div id="aba-clientes" class="aba-conteudo hidden">
                     <div class="flex justify-between items-center mb-6">
                         <div>
@@ -1679,7 +1833,7 @@
                     </div>
 
                     <div class="bg-brand-card p-5 rounded-t-2xl shadow-sm border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
-                        <input type="text" id="buscaClientes" onkeyup="filtrarClientes()" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
+                        <input type="text" id="buscaClientes" onkeyup="filtrarClientes()" placeholder="🔍 Pesquisar aba..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
                         <div class="flex flex-wrap items-center gap-2">
                             <button onclick="abrirModalCliente()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow">+ Novo</button>
                             <button onclick="gerarRelatorioClientes()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">PDF</button>
@@ -1723,7 +1877,7 @@
                     <div id="dashRpiContainer" class="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6"></div>
 
                     <div class="bg-brand-card p-4 rounded-t-2xl border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
-                        <input type="text" id="buscaRPI" onkeyup="filtrarRPI('TODOS')" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
+                        <input type="text" id="buscaRPI" onkeyup="filtrarRPI('TODOS')" placeholder="🔍 Pesquisar aba..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
                         <div class="flex flex-wrap items-center gap-2">
                             <button onclick="gerarRelatorioRPI()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">PDF</button>
                             <button onclick="exportarParaExcel('Revistas_RPI', rpiCache)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
@@ -1760,7 +1914,7 @@
                     </div>
 
                     <div class="bg-brand-card p-4 rounded-t-2xl border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
-                        <input type="text" id="buscaGRU" onkeyup="filtrarGRU()" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
+                        <input type="text" id="buscaGRU" onkeyup="filtrarGRU()" placeholder="🔍 Pesquisar aba..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
                         <div class="flex flex-wrap items-center gap-2">
                             <button onclick="gerarRelatorioGRU()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">PDF</button>
                             <button onclick="exportarParaExcel('Guias_GRU', cacheGRU)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
@@ -1799,7 +1953,7 @@
                     </div>
 
                     <div class="bg-brand-card p-4 rounded-t-2xl border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
-                        <input type="text" id="buscaMensal" onkeyup="filtrarMensal()" placeholder="🔍 Pesquisar..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
+                        <input type="text" id="buscaMensal" onkeyup="filtrarMensal()" placeholder="🔍 Pesquisar aba..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
                         <div class="flex flex-wrap items-center gap-2">
                             <button onclick="gerarRelatorioMensal()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">PDF</button>
                             <button onclick="exportarParaExcel('Base_Administrativo', cacheMensal)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
