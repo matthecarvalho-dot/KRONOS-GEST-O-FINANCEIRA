@@ -1,7 +1,7 @@
 {
   "name": "Kronos GS - ERP Executive Suite",
   "short_name": "Kronos GS",
-  "start_url": "/KRONOS-GEST-O-FINANCEIRA/",
+  "start_url": "/KRONOS-GEST-O-FINANCEIRA/index.html",
   "scope": "/KRONOS-GEST-O-FINANCEIRA/",
   "display": "standalone",
   "background_color": "#050B14",
@@ -10,12 +10,14 @@
     {
       "src": "https://i.imgur.com/NZyhksv.jpeg",
       "sizes": "192x192",
-      "type": "image/jpeg"
+      "type": "image/jpeg",
+      "purpose": "any maskable"
     },
     {
       "src": "https://i.imgur.com/NZyhksv.jpeg",
       "sizes": "512x512",
-      "type": "image/jpeg"
+      "type": "image/jpeg",
+      "purpose": "any maskable"
     }
   ]
 }
