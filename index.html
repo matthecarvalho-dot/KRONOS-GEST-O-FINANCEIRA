@@ -1194,12 +1194,16 @@
                         if (contadorOp > 0) { await batch.commit(); }
                     }
 
+                    // 1. FATURAMENTO (COBRANÇAS) - LÊ TODAS AS ABAS
                     if (modulo === 'cobrancas') {
                         let itensCobranca = [];
-                        for (let nomeAba of ['DIA 5', 'DIA 20']) {
-                            if (!workbook.Sheets[nomeAba]) continue;
-                            const diaVencimento = nomeAba.includes('5') ? 5 : 20;
-                            const json = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba]);
+                        for (let nomeAba of workbook.SheetNames) {
+                            const aba = workbook.Sheets[nomeAba];
+                            const json = XLSX.utils.sheet_to_json(aba);
+                            
+                            // Define o ciclo 20 se a aba tiver "20" no nome, caso contrário, assume ciclo 5
+                            const diaVencimento = nomeAba.includes('20') ? 20 : 5; 
+                            
                             for (let linha of json) {
                                 if (!linha['CLIENTE']) continue; 
                                 let cliId = String(linha['CLIENTE']).trim();
@@ -1208,10 +1212,11 @@
                                 let parcelasPagas = 1, totalParcelas = 1;
                                 if (quantParStr.includes('/')) {
                                     let partes = quantParStr.split('/');
-                                    parcelasPagas = parseInt(partes[0]) || 1; totalParcelas = parseInt(partes[1]) || 1;
+                                    parcelasPagas = parseInt(partes[0]) || 1; 
+                                    totalParcelas = parseInt(partes[1]) || 1;
                                 }
-                                let valorParcela = parseFloat(String(linha['VALOR PARCELA']).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                                let valorRecebido = parseFloat(String(linha['TOTAL RECEBIDO']).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+                                let valorParcela = parseFloat(String(linha['VALOR PARCELA'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+                                let valorRecebido = parseFloat(String(linha['TOTAL RECEBIDO'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
                                 let status = valorRecebido >= (parcelasPagas * valorParcela) ? 'pago' : 'pendente';
                                 let cnpj = String(linha['CNPJ'] || '').trim();
 
@@ -1219,49 +1224,40 @@
                             }
                         }
                         await executarEmLotes("cobrancas", itensCobranca, (d) => `${String(d.cliente_id || '').trim()}_${d.dia_vencimento}_${String(d.marca || '').trim()}`.toUpperCase());
-                        await registrarLog("Planilha de Cobranças importada via Excel");
-                        
-                        // SINCRONIZAÇÃO AUTOMÁTICA DA BASE MARCAS (CLIENTES)
+                        await registrarLog("Planilha de Cobranças importada (Todas as abas)");
                         await window.sincronizarClientesGlobais(itensCobranca);
-                        
                         carregarCobrancas(cicloAtual);
                     }
 
+                    // 2. BASE MARCAS (CLIENTES) - LÊ TODAS AS ABAS
                     if (modulo === 'clientes') {
                         let itensClientes = [];
-                        let nomeAbaClientes = workbook.SheetNames.find(n => n.toUpperCase().includes('BASE MARCAS') || n.toUpperCase().includes('FINANCEIRO')) || workbook.SheetNames[0];
-                        const aba = workbook.Sheets[nomeAbaClientes];
-                        if (aba) {
+                        for (let nomeAba of workbook.SheetNames) {
+                            const aba = workbook.Sheets[nomeAba];
                             const json = XLSX.utils.sheet_to_json(aba);
+                            
+                            // Se a aba tiver "CANCELADO" no nome, força o status padrão como cancelado
+                            const isCancelados = nomeAba.toUpperCase().includes('CANCELADO');
+                            
                             for (let linha of json) {
                                 let cli = String(linha['CLIENTE'] || linha['Cliente'] || linha['NOME'] || '').trim();
                                 if (!cli) continue;
                                 let empresa = String(linha['EMPRESA'] || linha['Empresa'] || linha['MARCA'] || linha['Marca'] || '-').trim();
                                 let telefone = String(linha['TEL.'] || linha['Tel'] || linha['TELEFONE'] || '').trim();
                                 let valorPc = parseFloat(String(linha['VALOR PC'] || linha['Valor Pc'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                                let statusCli = String(linha['STATUS'] || linha['Status'] || 'QUITADO').trim();
+                                
+                                let statusCli = String(linha['STATUS'] || linha['Status'] || (isCancelados ? 'CANCELADO' : 'QUITADO')).trim();
                                 let anuidade = String(linha['ANUIDADE'] || linha['Anuidade'] || '').trim();
+                                
                                 itensClientes.push({ cliente: cli, empresa: empresa, marca: empresa, telefone: telefone, valor_pc: valorPc, status_cliente: statusCli, anuidade: anuidade });
                             }
                         }
-                        let nomeAbaCancelados = workbook.SheetNames.find(n => n.toUpperCase().includes('CANCELADOS'));
-                        if (nomeAbaCancelados && workbook.Sheets[nomeAbaCancelados]) {
-                            const jsonCanc = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAbaCancelados]);
-                            for (let linha of jsonCanc) {
-                                let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
-                                if (!cli) continue;
-                                let empresa = String(linha['EMPRESA'] || linha['Empresa'] || '-').trim();
-                                let telefone = String(linha['TEL.'] || linha['Tel'] || '').trim();
-                                let valorPc = parseFloat(String(linha['VALOR PC'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                                let anuidade = String(linha['ANUIDADE'] || '').trim();
-                                itensClientes.push({ cliente: cli, empresa: empresa, marca: empresa, telefone: telefone, valor_pc: valorPc, status_cliente: 'CANCELADO', anuidade: anuidade });
-                            }
-                        }
                         await executarEmLotes("clientes", itensClientes, (d) => `${String(d.cliente || '').trim()}_${String(d.empresa || d.marca || '').trim()}`.toUpperCase());
-                        await registrarLog("Planilha Base Marcas importada via Excel");
+                        await registrarLog("Planilha Base Marcas importada (Todas as abas)");
                         carregarClientes();
                     }
 
+                    // 3. RPI - LÊ TODAS AS ABAS
                     if (modulo === 'rpi') {
                         let itensRpi = [];
                         for (let sheetName of workbook.SheetNames) {
@@ -1279,14 +1275,15 @@
                             }
                         }
                         await executarEmLotes("rpi_marcas", itensRpi, (d) => String(d.processo || '').trim());
-                        await registrarLog("Revistas RPI importadas via Excel");
+                        await registrarLog("Revistas RPI importadas (Todas as abas)");
                         carregarRPI();
                     }
 
+                    // 4. GUIAS GRU - LÊ TODAS AS ABAS
                     if (modulo === 'gru') {
                         let itensGru = [];
-                        const aba = workbook.Sheets[workbook.SheetNames[0]];
-                        if (aba) {
+                        for (let nomeAba of workbook.SheetNames) {
+                            const aba = workbook.Sheets[nomeAba];
                             const json = XLSX.utils.sheet_to_json(aba);
                             for (let linha of json) {
                                 let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
@@ -1297,19 +1294,16 @@
                             }
                         }
                         await executarEmLotes("gru", itensGru, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.vencimento || '').trim()}`.toUpperCase());
-                        await registrarLog("Planilha GRU importada via Excel");
-                        
-                        // SINCRONIZAÇÃO AUTOMÁTICA DA BASE MARCAS (CLIENTES)
+                        await registrarLog("Planilha GRU importada (Todas as abas)");
                         await window.sincronizarClientesGlobais(itensGru);
-
                         carregarGRU();
                     }
 
+                    // 5. BASE ADMINISTRATIVA - LÊ TODAS AS ABAS
                     if (modulo === 'mensal') {
                         let itensMensal = [];
-                        let nomeAbaAdm = workbook.SheetNames.find(n => n.toUpperCase().includes('ADMINISTRATIVO')) || workbook.SheetNames[0];
-                        const aba = workbook.Sheets[nomeAbaAdm];
-                        if (aba) {
+                        for (let nomeAba of workbook.SheetNames) {
+                            const aba = workbook.Sheets[nomeAba];
                             const json = XLSX.utils.sheet_to_json(aba);
                             for (let linha of json) {
                                 let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
@@ -1327,11 +1321,8 @@
                             }
                         }
                         await executarEmLotes("mensal", itensMensal, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.data_pagamento || '').trim()}`.toUpperCase());
-                        await registrarLog("Base Administrativa importada via Excel");
-                        
-                        // SINCRONIZAÇÃO AUTOMÁTICA DA BASE MARCAS (CLIENTES)
+                        await registrarLog("Base Administrativa importada (Todas as abas)");
                         await window.sincronizarClientesGlobais(itensMensal);
-                        
                         carregarMensal();
                     }
 
