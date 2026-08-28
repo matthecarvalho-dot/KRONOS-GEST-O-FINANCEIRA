@@ -148,6 +148,76 @@
             } catch (e) { console.error("Erro ao registrar auditoria:", e); }
         };
 
+        /* ----- SINCRONIZAÇÃO INTELIGENTE DE CLIENTES ----- */
+        window.sincronizarClientesGlobais = async function(listaParaSincronizar) {
+            if (!listaParaSincronizar || listaParaSincronizar.length === 0) return;
+            try {
+                // Filtra e formata os clientes extraídos de outras abas
+                const mapaEntrada = new Map();
+                for (let item of listaParaSincronizar) {
+                    let c = String(item.cliente || item.cliente_id || '').trim();
+                    let m = String(item.marca || item.empresa || '').trim();
+                    if (!c) continue; // Ignora registros sem nome do cliente
+                    
+                    let chave = `${c.toUpperCase()}_${m.toUpperCase()}`;
+                    if (!mapaEntrada.has(chave)) {
+                        mapaEntrada.set(chave, {
+                            cliente: c,
+                            empresa: m,
+                            marca: m,
+                            telefone: item.telefone || '',
+                            valor_pc: item.valor_pc || item.valor || item.valor_total || 0,
+                            status_cliente: 'QUITADO', // Novo cliente entra como quitado por padrão
+                            anuidade: ''
+                        });
+                    }
+                }
+
+                if (mapaEntrada.size === 0) return;
+
+                // Busca clientes já existentes na base
+                const snapCli = await getDocs(collection(db, "clientes"));
+                const setExistentes = new Set();
+                snapCli.forEach(doc => {
+                    let data = doc.data();
+                    let c = String(data.cliente || '').trim().toUpperCase();
+                    let m = String(data.empresa || data.marca || '').trim().toUpperCase();
+                    setExistentes.add(`${c}_${m}`);
+                });
+
+                // Cria lote para adicionar apenas clientes/marcas que não existem na Base Marcas
+                let batchCli = writeBatch(db);
+                let count = 0;
+                let colRef = collection(db, "clientes");
+
+                for (let [chave, dados] of mapaEntrada.entries()) {
+                    if (!setExistentes.has(chave)) { // Se não existir, cadastra
+                        batchCli.set(doc(colRef), dados);
+                        count++;
+                        
+                        if (count >= 400) {
+                            await batchCli.commit();
+                            batchCli = writeBatch(db);
+                            count = 0;
+                        }
+                    }
+                }
+                
+                if (count > 0) {
+                    await batchCli.commit();
+                    await registrarLog(`${count} clientes sincronizados e adicionados automaticamente na Base Marcas.`);
+                    
+                    // Atualiza silenciosamente a memória de clientes
+                    const q = await getDocs(collection(db, "clientes"));
+                    cacheClientes = [];
+                    q.forEach(d => cacheClientes.push({ id: d.id, ...d.data() }));
+                }
+            } catch (error) {
+                console.error("Erro na sincronização automática de clientes:", error);
+            }
+        };
+        /* ------------------------------------------------- */
+
         window.toggleMenuMobile = function() {
             const sidebar = document.getElementById('sidebar-menu');
             const overlay = document.getElementById('sidebar-overlay');
@@ -485,7 +555,6 @@
             } catch (e) { console.error("Erro ao carregar dashboard:", e); }
         }
 
-        /* ----- BUSCA GLOBAL UNIFICADA ----- */
         window.executarBuscaGlobal = function() {
             const termo = document.getElementById('inputBuscaGlobal').value.toLowerCase().trim();
             const dropdown = document.getElementById('dropdownBuscaGlobal');
@@ -499,7 +568,6 @@
             dropdown.classList.remove('hidden');
             let resultadosHTML = '';
 
-            // Busca em Clientes
             const resClientes = cacheClientes.filter(c => 
                 String(c.cliente || '').toLowerCase().includes(termo) || 
                 String(c.empresa || c.marca || '').toLowerCase().includes(termo) ||
@@ -509,86 +577,35 @@
             if (resClientes.length > 0) {
                 resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Base Marcas (${resClientes.length})</div>`;
                 resClientes.forEach(c => {
-                    resultadosHTML += `
-                        <button onclick="irParaResultado('clientes')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group">
-                            <div>
-                                <p class="text-xs font-semibold text-white group-hover:text-brand-gold">${c.cliente}</p>
-                                <p class="text-[10px] text-slate-400">Marca: ${c.empresa || c.marca || '-'} | Status: ${c.status_cliente}</p>
-                            </div>
-                            <span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span>
-                        </button>
-                    `;
+                    resultadosHTML += `<button onclick="irParaResultado('clientes')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group"><div><p class="text-xs font-semibold text-white group-hover:text-brand-gold">${c.cliente}</p><p class="text-[10px] text-slate-400">Marca: ${c.empresa || c.marca || '-'} | Status: ${c.status_cliente}</p></div><span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span></button>`;
                 });
             }
 
-            // Busca em RPI
-            const resRPI = rpiCache.filter(r => 
-                String(r.processo || '').toLowerCase().includes(termo) || 
-                String(r.marca || '').toLowerCase().includes(termo)
-            ).slice(0, 5);
-
+            const resRPI = rpiCache.filter(r => String(r.processo || '').toLowerCase().includes(termo) || String(r.marca || '').toLowerCase().includes(termo)).slice(0, 5);
             if (resRPI.length > 0) {
                 resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Processos INPI (${resRPI.length})</div>`;
                 resRPI.forEach(r => {
-                    resultadosHTML += `
-                        <button onclick="irParaResultado('rpi')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group">
-                            <div>
-                                <p class="text-xs font-semibold text-blue-400">${r.processo}</p>
-                                <p class="text-[10px] text-slate-400">Marca: ${r.marca || '-'} | Fase: ${r.fase}</p>
-                            </div>
-                            <span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span>
-                        </button>
-                    `;
+                    resultadosHTML += `<button onclick="irParaResultado('rpi')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group"><div><p class="text-xs font-semibold text-blue-400">${r.processo}</p><p class="text-[10px] text-slate-400">Marca: ${r.marca || '-'} | Fase: ${r.fase}</p></div><span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span></button>`;
                 });
             }
 
-            // Busca em Faturamento
-            const resCob = cacheCobrancas.filter(c => 
-                String(c.cliente_id || '').toLowerCase().includes(termo) || 
-                String(c.marca || '').toLowerCase().includes(termo) ||
-                String(c.cnpj || '').toLowerCase().includes(termo)
-            ).slice(0, 5);
-
+            const resCob = cacheCobrancas.filter(c => String(c.cliente_id || '').toLowerCase().includes(termo) || String(c.marca || '').toLowerCase().includes(termo) || String(c.cnpj || '').toLowerCase().includes(termo)).slice(0, 5);
             if (resCob.length > 0) {
                 resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Faturamento (${resCob.length})</div>`;
                 resCob.forEach(c => {
-                    resultadosHTML += `
-                        <button onclick="irParaResultado('cobrancas')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group">
-                            <div>
-                                <p class="text-xs font-semibold text-emerald-400">R$ ${Number(c.valor_total || 0).toFixed(2)} - ${c.cliente_id}</p>
-                                <p class="text-[10px] text-slate-400">Marca: ${c.marca || '-'} | Vencimento: Dia ${c.dia_vencimento}</p>
-                            </div>
-                            <span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span>
-                        </button>
-                    `;
+                    resultadosHTML += `<button onclick="irParaResultado('cobrancas')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group"><div><p class="text-xs font-semibold text-emerald-400">R$ ${Number(c.valor_total || 0).toFixed(2)} - ${c.cliente_id}</p><p class="text-[10px] text-slate-400">Marca: ${c.marca || '-'} | Vencimento: Dia ${c.dia_vencimento}</p></div><span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span></button>`;
                 });
             }
 
-            // Busca em GRU
-            const resGRU = cacheGRU.filter(c => 
-                String(c.cliente || '').toLowerCase().includes(termo) || 
-                String(c.marca || '').toLowerCase().includes(termo)
-            ).slice(0, 5);
-
+            const resGRU = cacheGRU.filter(c => String(c.cliente || '').toLowerCase().includes(termo) || String(c.marca || '').toLowerCase().includes(termo)).slice(0, 5);
             if (resGRU.length > 0) {
                 resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Guias GRU (${resGRU.length})</div>`;
                 resGRU.forEach(c => {
-                    resultadosHTML += `
-                        <button onclick="irParaResultado('gru')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group">
-                            <div>
-                                <p class="text-xs font-semibold text-white group-hover:text-brand-gold">${c.cliente}</p>
-                                <p class="text-[10px] text-slate-400">Marca: ${c.marca || '-'} | Vencimento: ${c.vencimento}</p>
-                            </div>
-                            <span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span>
-                        </button>
-                    `;
+                    resultadosHTML += `<button onclick="irParaResultado('gru')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group"><div><p class="text-xs font-semibold text-white group-hover:text-brand-gold">${c.cliente}</p><p class="text-[10px] text-slate-400">Marca: ${c.marca || '-'} | Vencimento: ${c.vencimento}</p></div><span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span></button>`;
                 });
             }
 
-            if (resultadosHTML === '') {
-                resultadosHTML = `<p class="text-xs text-slate-400 text-center py-5">Nenhum registro encontrado para "${termo}".</p>`;
-            }
-
+            if (resultadosHTML === '') resultadosHTML = `<p class="text-xs text-slate-400 text-center py-5">Nenhum registro encontrado para "${termo}".</p>`;
             conteudo.innerHTML = resultadosHTML;
         };
 
@@ -604,7 +621,6 @@
                 document.getElementById('dropdownBuscaGlobal')?.classList.add('hidden');
             }
         });
-        /* --------------------------------- */
 
         window.carregarCobrancas = async function(dia) {
             cicloAtual = dia;
@@ -642,10 +658,7 @@
         window.renderizarTabelaCobrancas = function(dados) {
             const tabela = document.getElementById('tabelaCobrancas');
             tabela.innerHTML = '';
-            if (dados.length === 0) {
-                tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro encontrado.</td></tr>`;
-                return;
-            }
+            if (dados.length === 0) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro encontrado.</td></tr>`; return; }
             let html = '';
             dados.forEach(data => {
                 const badge = data.status_pagamento === 'pago' 
@@ -673,10 +686,7 @@
 
         window.filtrarCobrancas = function() {
             const termo = document.getElementById('buscaCobrancas').value.toLowerCase();
-            const filtrados = cacheCobrancas.filter(item => 
-                String(item.cliente_id || '').toLowerCase().includes(termo) || 
-                String(item.marca || '').toLowerCase().includes(termo)
-            );
+            const filtrados = cacheCobrancas.filter(item => String(item.cliente_id || '').toLowerCase().includes(termo) || String(item.marca || '').toLowerCase().includes(termo));
             renderizarTabelaCobrancas(filtrados);
         }
 
@@ -702,6 +712,10 @@
                     valor_pago: valorPago, status_pagamento: status
                 });
                 await registrarLog(`Cobrança cadastrada para ${cliente}`);
+                
+                // SINCRONIZAÇÃO AUTOMÁTICA
+                await window.sincronizarClientesGlobais([{ cliente: cliente, marca: marca, valor_pc: valor }]);
+                
                 alert("Cobrança cadastrada com sucesso!");
                 fecharModalCobranca();
                 document.getElementById('formCobrancaManual').reset();
@@ -721,18 +735,8 @@
         window.gerarRelatorioCobrancas = function() {
             let janela = window.open('', '_blank');
             if (!janela) { alert("Permita pop-ups no navegador para gerar o relatório."); return; }
-            janela.document.write(`
-                <html><head><title>Relatório de Faturamento - Ciclo Dia ${cicloAtual}</title>
-                <script src="https://cdn.tailwindcss.com"><\/script></head>
-                <body class="bg-slate-950 text-white p-10 font-sans">
-                    <h1 class="text-2xl font-bold text-amber-400 mb-1">Relatório Executivo de Faturamento</h1>
-                    <p class="text-xs text-slate-400 mb-6">Ciclo Vencimento Dia ${cicloAtual} | Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
-                    <table class="w-full border-collapse border border-slate-800 text-left text-xs">
-                        <tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Marca</th><th class="border border-slate-800 p-2.5">Valor Parcela</th><th class="border border-slate-800 p-2.5">Valor Pago</th><th class="border border-slate-800 p-2.5">Status</th></tr>
-            `);
-            cacheCobrancas.forEach(c => {
-                janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente_id}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.marca || '-'}</td><td class="border border-slate-800 p-2.5">R$ ${Number(c.valor_total||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 text-emerald-400 font-semibold">R$ ${Number(c.valor_pago||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.status_pagamento}</td></tr>`);
-            });
+            janela.document.write(`<html><head><title>Relatório de Faturamento - Ciclo Dia ${cicloAtual}</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Relatório Executivo de Faturamento</h1><p class="text-xs text-slate-400 mb-6">Ciclo Vencimento Dia ${cicloAtual} | Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Marca</th><th class="border border-slate-800 p-2.5">Valor Parcela</th><th class="border border-slate-800 p-2.5">Valor Pago</th><th class="border border-slate-800 p-2.5">Status</th></tr>`);
+            cacheCobrancas.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente_id}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.marca || '-'}</td><td class="border border-slate-800 p-2.5">R$ ${Number(c.valor_total||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 text-emerald-400 font-semibold">R$ ${Number(c.valor_pago||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.status_pagamento}</td></tr>`); });
             janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-5 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
         }
@@ -874,21 +878,15 @@
 
         window.filtrarClientes = function() {
             const termo = document.getElementById('buscaClientes').value.toLowerCase();
-            const filtrados = cacheClientes.filter(item => 
-                String(item.cliente || '').toLowerCase().includes(termo) || 
-                String(item.empresa || item.marca || '').toLowerCase().includes(termo) ||
-                String(item.status_cliente || '').toLowerCase().includes(termo)
-            );
+            const filtrados = cacheClientes.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.empresa || item.marca || '').toLowerCase().includes(termo) || String(item.status_cliente || '').toLowerCase().includes(termo));
             renderizarTabelaClientes(filtrados);
         }
 
         window.gerarRelatorioClientes = function() {
             let janela = window.open('', '_blank');
-            if (!janela) { alert("Permita pop-ups no navegador."); return; }
+            if (!janela) { alert("Permita pop-ups."); return; }
             janela.document.write(`<html><head><title>Relatório - Base Marcas Financeiro</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Base Marcas Financeiro</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Empresa</th><th class="border border-slate-800 p-2.5">Tel</th><th class="border border-slate-800 p-2.5">Valor Pc</th><th class="border border-slate-800 p-2.5">Status</th><th class="border border-slate-800 p-2.5">Anuidade</th></tr>`);
-            cacheClientes.forEach(c => {
-                janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.empresa || c.marca || ''}</td><td class="border border-slate-800 p-2.5">${c.telefone || ''}</td><td class="border border-slate-800 p-2.5">R$ ${Number(c.valor_pc||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 font-bold">${c.status_cliente}</td><td class="border border-slate-800 p-2.5">${c.anuidade || ''}</td></tr>`);
-            });
+            cacheClientes.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.empresa || c.marca || ''}</td><td class="border border-slate-800 p-2.5">${c.telefone || ''}</td><td class="border border-slate-800 p-2.5">R$ ${Number(c.valor_pc||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 font-bold">${c.status_cliente}</td><td class="border border-slate-800 p-2.5">${c.anuidade || ''}</td></tr>`); });
             janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-5 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
         }
@@ -905,11 +903,7 @@
             try {
                 const querySnapshot = await getDocs(collection(db, "rpi_marcas"));
                 rpiCache = [];
-                if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro RPI. Importe a planilha.</td></tr>`;
-                    renderizarFiltrosRPI({});
-                    return;
-                }
+                if (querySnapshot.empty) { tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro RPI. Importe a planilha.</td></tr>`; renderizarFiltrosRPI({}); return; }
                 let contFases = {};
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
@@ -924,23 +918,13 @@
 
         window.renderizarFiltrosRPI = function(contFases) {
             const container = document.getElementById('dashRpiContainer');
-            container.innerHTML = `
-                <button onclick="filtrarRPI('TODOS')" class="p-4 bg-brand-card text-brand-gold rounded-xl shadow-sm border border-brand-border text-left font-semibold hover:bg-brand-border/40 transition-all">
-                    <p class="text-[9px] uppercase tracking-widest text-slate-400 font-medium">TODOS OS PROCESSOS</p>
-                    <p class="text-xl mt-1 font-bold">${rpiCache.length}</p>
-                </button>
-            `;
+            container.innerHTML = `<button onclick="filtrarRPI('TODOS')" class="p-4 bg-brand-card text-brand-gold rounded-xl shadow-sm border border-brand-border text-left font-semibold hover:bg-brand-border/40 transition-all"><p class="text-[9px] uppercase tracking-widest text-slate-400 font-medium">TODOS OS PROCESSOS</p><p class="text-xl mt-1 font-bold">${rpiCache.length}</p></button>`;
             const fasesDesejadas = ['DEFERIMENTO', 'EXAME FORMAL', 'EXAME DE MÉRITO', 'OPOSIÇÃO', 'INDEFERIMENTO', 'CONCESSÃO', 'ARQUIVAMENTO'];
             fasesDesejadas.forEach(faseNome => {
                 let qtd = 0;
                 Object.keys(contFases).forEach(f => { if (f.includes(faseNome)) qtd += contFases[f]; });
                 let corAlerta = (faseNome === 'OPOSIÇÃO' || faseNome === 'INDEFERIMENTO') ? 'border-amber-500/50 text-amber-400' : 'text-brand-gold';
-                container.innerHTML += `
-                    <button onclick="filtrarRPI('${faseNome}')" class="p-4 bg-brand-card text-white rounded-xl shadow-sm border border-brand-border text-left font-medium hover:border-brand-gold transition-all">
-                        <p class="text-[9px] uppercase tracking-widest text-slate-400 truncate font-medium">${faseNome} ${(faseNome === 'OPOSIÇÃO') ? '⚠️' : ''}</p>
-                        <p class="text-xl font-bold ${corAlerta} mt-1">${qtd}</p>
-                    </button>
-                `;
+                container.innerHTML += `<button onclick="filtrarRPI('${faseNome}')" class="p-4 bg-brand-card text-white rounded-xl shadow-sm border border-brand-border text-left font-medium hover:border-brand-gold transition-all"><p class="text-[9px] uppercase tracking-widest text-slate-400 truncate font-medium">${faseNome} ${(faseNome === 'OPOSIÇÃO') ? '⚠️' : ''}</p><p class="text-xl font-bold ${corAlerta} mt-1">${qtd}</p></button>`;
             });
         }
 
@@ -949,23 +933,13 @@
             const tabela = document.getElementById('tabelaRPI');
             tabela.innerHTML = '';
             let filtrados = termoFase === 'TODOS' ? rpiCache : rpiCache.filter(item => item.fase.includes(termoFase));
-            if (busca) {
-                filtrados = filtrados.filter(item => String(item.processo || '').toLowerCase().includes(busca) || String(item.marca || '').toLowerCase().includes(busca));
-            }
+            if (busca) filtrados = filtrados.filter(item => String(item.processo || '').toLowerCase().includes(busca) || String(item.marca || '').toLowerCase().includes(busca));
             if (filtrados.length === 0) { tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum processo encontrado.</td></tr>`; return; }
             let html = '';
             filtrados.slice(0, 500).forEach(data => {
                 let badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-                if (data.fase.includes('OPOSIÇÃO') || data.fase.includes('INDEFERIMENTO')) {
-                    badgeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/20 font-bold';
-                }
-                html += `
-                    <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
-                        <td class="px-4 md:px-6 py-3.5 text-xs font-mono text-slate-300 font-medium">${data.processo || ''}</td>
-                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.marca || ''}</td>
-                        <td class="px-4 md:px-6 py-3.5 text-xs"><span class="px-2.5 py-1 text-[10px] rounded-md border ${badgeClass}">${data.fase}</span></td>
-                    </tr>
-                `;
+                if (data.fase.includes('OPOSIÇÃO') || data.fase.includes('INDEFERIMENTO')) badgeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/20 font-bold';
+                html += `<tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors"><td class="px-4 md:px-6 py-3.5 text-xs font-mono text-slate-300 font-medium">${data.processo || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.marca || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs"><span class="px-2.5 py-1 text-[10px] rounded-md border ${badgeClass}">${data.fase}</span></td></tr>`;
             });
             tabela.innerHTML = html;
         }
@@ -974,9 +948,7 @@
             let janela = window.open('', '_blank');
             if (!janela) { alert("Permita pop-ups."); return; }
             janela.document.write(`<html><head><title>Relatório RPI</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Relatório Processos RPI (INPI)</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Processo</th><th class="border border-slate-800 p-2.5">Marca</th><th class="border border-slate-800 p-2.5">Fase</th></tr>`);
-            rpiCache.forEach(c => {
-                janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-mono">${c.processo}</td><td class="border border-slate-800 p-2.5 font-medium">${c.marca}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.fase}</td></tr>`);
-            });
+            rpiCache.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-mono">${c.processo}</td><td class="border border-slate-800 p-2.5 font-medium">${c.marca}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.fase}</td></tr>`); });
             janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-5 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
         }
@@ -1000,48 +972,21 @@
             if (dados.length === 0) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro.</td></tr>`; return; }
             let html = '';
             dados.slice(0, 500).forEach(data => {
-                const badgeStatus = data.status_pagamento === 'pago' 
-                    ? '<span class="px-2.5 py-1 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 rounded-md border border-emerald-500/20">PAGO</span>' 
-                    : '<span class="px-2.5 py-1 text-[10px] font-semibold bg-amber-500/10 text-amber-400 rounded-md border border-amber-500/20">PENDENTE</span>';
-
-                html += `
-                    <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
-                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td>
-                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.marca || ''}</td>
-                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.vencimento || ''}</td>
-                        <td class="px-4 md:px-6 py-3.5 text-xs flex items-center gap-2">
-                            ${badgeStatus}
-                            <button onclick="alternarStatusGRU('${data.id}', '${data.status_pagamento || 'pendente'}')" class="px-2.5 py-1 bg-[#132238] hover:bg-brand-gold hover:text-brand-dark text-slate-300 text-[11px] font-medium rounded-lg border border-brand-border transition-all">Alterar</button>
-                        </td>
-                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-300">
-                            <div class="flex items-center gap-2">
-                                <span class="truncate max-w-xs text-slate-400">${data.anotacoes || 'Sem anotações'}</span>
-                                <button onclick="editarAnotacaoGRU('${data.id}', \`${data.anotacoes || ''}\`)" class="px-2.5 py-1 bg-[#132238] hover:bg-brand-gold hover:text-brand-dark text-slate-300 text-[11px] font-medium rounded-lg border border-brand-border transition-all">Editar</button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
+                const badgeStatus = data.status_pagamento === 'pago' ? '<span class="px-2.5 py-1 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 rounded-md border border-emerald-500/20">PAGO</span>' : '<span class="px-2.5 py-1 text-[10px] font-semibold bg-amber-500/10 text-amber-400 rounded-md border border-amber-500/20">PENDENTE</span>';
+                html += `<tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors"><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.marca || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.vencimento || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs flex items-center gap-2">${badgeStatus} <button onclick="alternarStatusGRU('${data.id}', '${data.status_pagamento || 'pendente'}')" class="px-2.5 py-1 bg-[#132238] hover:bg-brand-gold hover:text-brand-dark text-slate-300 text-[11px] font-medium rounded-lg border border-brand-border transition-all">Alterar</button></td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-300"><div class="flex items-center gap-2"><span class="truncate max-w-xs text-slate-400">${data.anotacoes || 'Sem anotações'}</span> <button onclick="editarAnotacaoGRU('${data.id}', \`${data.anotacoes || ''}\`)" class="px-2.5 py-1 bg-[#132238] hover:bg-brand-gold hover:text-brand-dark text-slate-300 text-[11px] font-medium rounded-lg border border-brand-border transition-all">Editar</button></div></td></tr>`;
             });
             tabela.innerHTML = html;
         }
 
         window.alternarStatusGRU = async function(docId, statusAtual) {
             let novoStatus = statusAtual === 'pago' ? 'pendente' : 'pago';
-            try { 
-                await updateDoc(doc(db, "gru", docId), { status_pagamento: novoStatus }); 
-                await registrarLog(`Status GRU alterado para ${novoStatus}`);
-                carregarGRU(); 
-            } catch (e) { alert("Erro."); }
+            try { await updateDoc(doc(db, "gru", docId), { status_pagamento: novoStatus }); await registrarLog(`Status GRU alterado para ${novoStatus}`); carregarGRU(); } catch (e) { alert("Erro."); }
         }
 
         window.editarAnotacaoGRU = async function(docId, anotacaoAtual) {
             let novaAnotacao = prompt("Digite a anotação/situação:", anotacaoAtual);
             if (novaAnotacao === null) return;
-            try { 
-                await updateDoc(doc(db, "gru", docId), { anotacoes: novaAnotacao.trim() }); 
-                await registrarLog(`Anotação GRU atualizada`);
-                carregarGRU(); 
-            } catch (e) { alert("Erro."); }
+            try { await updateDoc(doc(db, "gru", docId), { anotacoes: novaAnotacao.trim() }); await registrarLog(`Anotação GRU atualizada`); carregarGRU(); } catch (e) { alert("Erro."); }
         }
 
         window.filtrarGRU = function() {
@@ -1054,9 +999,7 @@
             let janela = window.open('', '_blank');
             if (!janela) { alert("Permita pop-ups."); return; }
             janela.document.write(`<html><head><title>Relatório GRU</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Relatório Guias GRU</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Marca</th><th class="border border-slate-800 p-2.5">Vencimento</th><th class="border border-slate-800 p-2.5">Status</th><th class="border border-slate-800 p-2.5">Anotações</th></tr>`);
-            cacheGRU.forEach(c => {
-                janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.marca}</td><td class="border border-slate-800 p-2.5">${c.vencimento}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.status_pagamento || 'pendente'}</td><td class="border border-slate-800 p-2.5">${c.anotacoes || ''}</td></tr>`);
-            });
+            cacheGRU.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.marca}</td><td class="border border-slate-800 p-2.5">${c.vencimento}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.status_pagamento || 'pendente'}</td><td class="border border-slate-800 p-2.5">${c.anotacoes || ''}</td></tr>`); });
             janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-5 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
         }
@@ -1080,15 +1023,7 @@
             if (dados.length === 0) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro.</td></tr>`; return; }
             let html = '';
             dados.slice(0, 500).forEach(data => {
-                html += `
-                    <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
-                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td>
-                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.marca || ''}</td>
-                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.data_pagamento || ''}</td>
-                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-semibold">R$ ${Number(data.valor || 0).toFixed(2)}</td>
-                        <td class="px-4 md:px-6 py-3.5 text-xs font-semibold text-emerald-400">${data.status || 'PAGO'}</td>
-                    </tr>
-                `;
+                html += `<tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors"><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.marca || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.data_pagamento || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-semibold">R$ ${Number(data.valor || 0).toFixed(2)}</td><td class="px-4 md:px-6 py-3.5 text-xs font-semibold text-emerald-400">${data.status || 'PAGO'}</td></tr>`;
             });
             tabela.innerHTML = html;
         }
@@ -1103,9 +1038,7 @@
             let janela = window.open('', '_blank');
             if (!janela) { alert("Permita pop-ups."); return; }
             janela.document.write(`<html><head><title>Relatório Base Administrativo</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Base Administrativo</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Marca</th><th class="border border-slate-800 p-2.5">Data</th><th class="border border-slate-800 p-2.5">Valor</th><th class="border border-slate-800 p-2.5">Status</th></tr>`);
-            cacheMensal.forEach(c => {
-                janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.marca}</td><td class="border border-slate-800 p-2.5">${c.data_pagamento}</td><td class="border border-slate-800 p-2.5 text-emerald-400 font-semibold">R$ ${Number(c.valor||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.status}</td></tr>`);
-            });
+            cacheMensal.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.marca}</td><td class="border border-slate-800 p-2.5">${c.data_pagamento}</td><td class="border border-slate-800 p-2.5 text-emerald-400 font-semibold">R$ ${Number(c.valor||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.status}</td></tr>`); });
             janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-5 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
         }
@@ -1287,6 +1220,10 @@
                         }
                         await executarEmLotes("cobrancas", itensCobranca, (d) => `${String(d.cliente_id || '').trim()}_${d.dia_vencimento}_${String(d.marca || '').trim()}`.toUpperCase());
                         await registrarLog("Planilha de Cobranças importada via Excel");
+                        
+                        // SINCRONIZAÇÃO AUTOMÁTICA DA BASE MARCAS (CLIENTES)
+                        await window.sincronizarClientesGlobais(itensCobranca);
+                        
                         carregarCobrancas(cicloAtual);
                     }
 
@@ -1361,6 +1298,10 @@
                         }
                         await executarEmLotes("gru", itensGru, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.vencimento || '').trim()}`.toUpperCase());
                         await registrarLog("Planilha GRU importada via Excel");
+                        
+                        // SINCRONIZAÇÃO AUTOMÁTICA DA BASE MARCAS (CLIENTES)
+                        await window.sincronizarClientesGlobais(itensGru);
+
                         carregarGRU();
                     }
 
@@ -1387,6 +1328,10 @@
                         }
                         await executarEmLotes("mensal", itensMensal, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.data_pagamento || '').trim()}`.toUpperCase());
                         await registrarLog("Base Administrativa importada via Excel");
+                        
+                        // SINCRONIZAÇÃO AUTOMÁTICA DA BASE MARCAS (CLIENTES)
+                        await window.sincronizarClientesGlobais(itensMensal);
+                        
                         carregarMensal();
                     }
 
