@@ -6,7 +6,6 @@
     <title>Kronos GS - ERP Executive Suite</title>
     <link rel="icon" type="image/jpeg" href="https://i.imgur.com/NZyhksv.jpeg">
     
-    <!-- Configurações para Web App / PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#050B14">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -15,36 +14,17 @@
     <link rel="apple-touch-icon" href="https://i.imgur.com/NZyhksv.jpeg">
 
     <style>
-        /* Animação Suave Executiva para Transição de Abas */
         @keyframes fadeInSlide {
-            from {
-                opacity: 0;
-                transform: translateY(8px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        .animate-fade-in {
-            animation: fadeInSlide 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
+        .animate-fade-in { animation: fadeInSlide 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
-        /* Animação de Flutuação e Brilho Dinâmico para a Logomarca */
         @keyframes logoFloat {
-            0%, 100% {
-                transform: translateY(0px) scale(1);
-                box-shadow: 0 0 10px rgba(212, 175, 55, 0.3);
-            }
-            50% {
-                transform: translateY(-7px) scale(1.04);
-                box-shadow: 0 0 20px rgba(212, 175, 55, 0.7);
-            }
+            0%, 100% { transform: translateY(0px) scale(1); box-shadow: 0 0 10px rgba(212, 175, 55, 0.3); }
+            50% { transform: translateY(-7px) scale(1.04); box-shadow: 0 0 20px rgba(212, 175, 55, 0.7); }
         }
-        .animate-logo-float {
-            display: inline-block;
-            animation: logoFloat 2.8s ease-in-out infinite;
-        }
+        .animate-logo-float { display: inline-block; animation: logoFloat 2.8s ease-in-out infinite; }
     </style>
 
     <script>
@@ -64,17 +44,14 @@
           if (deferredPrompt) {
               deferredPrompt.prompt();
               const { outcome } = await deferredPrompt.userChoice;
-              if (outcome === 'accepted') {
-                  console.log('Aplicativo instalado com sucesso!');
-              }
+              if (outcome === 'accepted') { console.log('Aplicativo instalado com sucesso!'); }
               deferredPrompt = null;
           } else {
-              alert("Como instalar o Kronos GS:\n\n• No Computador (Chrome / Edge):\nClique no ícone de instalação na barra de endereços ou nos 3 pontinhos do navegador e selecione 'Instalar Kronos GS'.\n\n• No Celular:\nToque no menu do navegador (3 pontinhos) e selecione 'Adicionar à tela inicial' ou 'Instalar aplicativo'.");
+              alert("Como instalar o Kronos GS:\n\n• No Computador (Chrome / Edge):\nClique no ícone de instalação na barra de endereços e selecione 'Instalar Kronos GS'.\n\n• No Celular:\nToque no menu do navegador (3 pontinhos) e selecione 'Adicionar à tela inicial'.");
           }
       };
     </script>
     
-    <!-- Fonte Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -99,7 +76,6 @@
         }
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- Chart.js para Gráficos Interativos -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script type="module">
@@ -121,22 +97,19 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        setPersistence(auth, inMemoryPersistence).catch((error) => {
-            console.error("Erro na persistência:", error);
-        });
+        setPersistence(auth, inMemoryPersistence).catch((error) => console.error("Erro na persistência:", error));
 
         const EMAIL_ADMIN = "matthecarvalho@gmail.com";
         let cicloAtual = 5;
         let chartStatusInstance = null;
         let chartFasesInstance = null;
 
-        // Variaveis Globais de Cache
         let cacheCobrancas = [];
         let cacheClientes = [];
-        let cacheParcelas = []; // Novo cache para a planilha de Parcelas
         let rpiCache = [];
         let cacheGRU = [];
         let cacheMensal = [];
+        let cacheParcelas = [];
 
         window.registrarLog = async function(acaoDescricao) {
             try {
@@ -149,16 +122,14 @@
             } catch (e) { console.error("Erro ao registrar auditoria:", e); }
         };
 
-        /* ----- SINCRONIZAÇÃO INTELIGENTE DE CLIENTES ----- */
         window.sincronizarClientesGlobais = async function(listaParaSincronizar) {
             if (!listaParaSincronizar || listaParaSincronizar.length === 0) return;
             try {
-                // Filtra e formata os clientes extraídos de outras abas
                 const mapaEntrada = new Map();
                 for (let item of listaParaSincronizar) {
                     let c = String(item.cliente || item.cliente_id || '').trim();
                     let m = String(item.marca || item.empresa || '').trim();
-                    if (!c) continue; // Ignora registros sem nome do cliente
+                    if (!c) continue;
                     
                     let chave = `${c.toUpperCase()}_${m.toUpperCase()}`;
                     if (!mapaEntrada.has(chave)) {
@@ -167,8 +138,8 @@
                             empresa: m,
                             marca: m,
                             telefone: item.telefone || '',
-                            valor_pc: item.valor_pc || item.valor_parcela || item.valor || item.valor_total || 0,
-                            status_cliente: 'QUITADO', // Novo cliente entra como quitado por padrão
+                            valor_pc: item.valor_pc || item.valor || item.valor_total || 0,
+                            status_cliente: 'QUITADO',
                             anuidade: ''
                         });
                     }
@@ -176,7 +147,6 @@
 
                 if (mapaEntrada.size === 0) return;
 
-                // Busca clientes já existentes na base
                 const snapCli = await getDocs(collection(db, "clientes"));
                 const setExistentes = new Set();
                 snapCli.forEach(doc => {
@@ -186,16 +156,14 @@
                     setExistentes.add(`${c}_${m}`);
                 });
 
-                // Cria lote para adicionar apenas clientes/marcas que não existem na Base Marcas
                 let batchCli = writeBatch(db);
                 let count = 0;
                 let colRef = collection(db, "clientes");
 
                 for (let [chave, dados] of mapaEntrada.entries()) {
-                    if (!setExistentes.has(chave)) { // Se não existir, cadastra
+                    if (!setExistentes.has(chave)) {
                         batchCli.set(doc(colRef), dados);
                         count++;
-                        
                         if (count >= 400) {
                             await batchCli.commit();
                             batchCli = writeBatch(db);
@@ -207,8 +175,6 @@
                 if (count > 0) {
                     await batchCli.commit();
                     await registrarLog(`${count} clientes sincronizados e adicionados automaticamente na Base Marcas.`);
-                    
-                    // Atualiza silenciosamente a memória de clientes
                     const q = await getDocs(collection(db, "clientes"));
                     cacheClientes = [];
                     q.forEach(d => cacheClientes.push({ id: d.id, ...d.data() }));
@@ -217,7 +183,6 @@
                 console.error("Erro na sincronização automática de clientes:", error);
             }
         };
-        /* ------------------------------------------------- */
 
         window.toggleMenuMobile = function() {
             const sidebar = document.getElementById('sidebar-menu');
@@ -294,18 +259,13 @@
             const senha = document.getElementById('loginSenha').value;
             const erroMsg = document.getElementById('loginErro');
 
-            if (!email || !senha) {
-                erroMsg.innerText = "Preencha e-mail e senha.";
-                return;
-            }
+            if (!email || !senha) { erroMsg.innerText = "Preencha e-mail e senha."; return; }
 
             erroMsg.innerText = "Autenticando...";
             try {
                 await signInWithEmailAndPassword(auth, email, senha);
                 await registrarLog("Login efetuado no sistema");
-            } catch (error) {
-                erroMsg.innerText = "Erro: E-mail ou senha incorretos.";
-            }
+            } catch (error) { erroMsg.innerText = "Erro: E-mail ou senha incorretos."; }
         }
 
         window.fazerCadastro = async function() {
@@ -314,10 +274,7 @@
             const msg = document.getElementById('loginErro');
             const sucessoMsg = document.getElementById('loginSucesso');
 
-            if (!email || !senha) {
-                msg.innerText = "Preencha todos os campos.";
-                return;
-            }
+            if (!email || !senha) { msg.innerText = "Preencha todos os campos."; return; }
 
             try {
                 await createUserWithEmailAndPassword(auth, email, senha);
@@ -328,12 +285,9 @@
                     criado_em: new Date().toLocaleDateString('pt-BR')
                 });
                 await registrarLog(`Novo usuário cadastrado: ${email}`);
-
                 sucessoMsg.innerText = "Conta criada com sucesso! Faça login.";
                 setTimeout(() => mostrarPainelLogin('entrar'), 2000);
-            } catch (error) {
-                msg.innerText = "Erro ao cadastrar: A senha deve ter ao menos 6 caracteres.";
-            }
+            } catch (error) { msg.innerText = "Erro ao cadastrar: A senha deve ter ao menos 6 caracteres."; }
         }
 
         window.redefinirSenha = async function() {
@@ -341,24 +295,17 @@
             const msg = document.getElementById('loginErro');
             const sucessoMsg = document.getElementById('loginSucesso');
 
-            if (!email) {
-                msg.innerText = "Informe seu e-mail.";
-                return;
-            }
+            if (!email) { msg.innerText = "Informe seu e-mail."; return; }
 
             try {
                 await sendPasswordResetEmail(auth, email);
                 sucessoMsg.innerText = "E-mail de recuperação enviado!";
-            } catch (error) {
-                msg.innerText = "Erro ao enviar e-mail. Verifique o endereço.";
-            }
+            } catch (error) { msg.innerText = "Erro ao enviar e-mail. Verifique o endereço."; }
         }
 
         window.fazerLogout = function() {
             registrarLog("Logout efetuado").then(() => {
-                signOut(auth).then(() => {
-                    window.location.reload();
-                });
+                signOut(auth).then(() => { window.location.reload(); });
             });
         }
 
@@ -404,10 +351,10 @@
             if(abaId === 'dashboard') carregarDashboardGeral();
             if(abaId === 'cobrancas') carregarCobrancas(cicloAtual);
             if(abaId === 'clientes') carregarClientes();
-            if(abaId === 'parcelas') carregarParcelas(); // Chamada para a nova aba
             if(abaId === 'rpi') carregarRPI();
             if(abaId === 'gru') carregarGRU();
             if(abaId === 'mensal') carregarMensal();
+            if(abaId === 'parcelas') carregarParcelas();
             if(abaId === 'admin') carregarPainelAdmin();
         }
 
@@ -420,10 +367,7 @@
         };
 
         window.exportarParaExcel = function(nomeArquivo, dadosArray) {
-            if (!dadosArray || dadosArray.length === 0) {
-                alert("Não há dados carregados para exportar.");
-                return;
-            }
+            if (!dadosArray || dadosArray.length === 0) { alert("Não há dados carregados para exportar."); return; }
             const worksheet = XLSX.utils.json_to_sheet(dadosArray);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Relatorio");
@@ -433,35 +377,41 @@
 
         window.carregarDashboardGeral = async function() {
             try {
-                const [snapCob, snapCli, snapRpi, snapGru, snapMensal] = await Promise.all([
+                const [snapCob, snapCli, snapRpi, snapGru, snapMensal, snapParc] = await Promise.all([
                     getDocs(collection(db, "cobrancas")),
                     getDocs(collection(db, "clientes")),
                     getDocs(collection(db, "rpi_marcas")),
                     getDocs(collection(db, "gru")),
-                    getDocs(collection(db, "mensal"))
+                    getDocs(collection(db, "mensal")),
+                    getDocs(collection(db, "parcelas"))
                 ]);
 
                 cacheCobrancas = [];
-                let totalPrevisto = 0, totalPago = 0, totalCob = 0;
+                let totalPrevisto = 0, totalPago = 0;
                 snapCob.forEach(d => {
                     const dat = d.data();
                     cacheCobrancas.push({ id: d.id, ...dat });
                     totalPrevisto += Number(dat.valor_total || 0);
                     totalPago += Number(dat.valor_pago || 0);
-                    totalCob++;
                 });
 
                 cacheClientes = [];
-                let totalCli = 0, quitados = 0, inadimplentes = 0, valorTotalPc = 0;
+                let totalCli = 0, pagantes = 0, quitados = 0, inadimplentes = 0, cancelados = 0, valorTotalPc = 0;
                 let ultimosClientes = [];
+                
                 snapCli.forEach(d => {
                     const dat = d.data();
                     cacheClientes.push({ id: d.id, ...dat });
                     totalCli++;
                     valorTotalPc += Number(dat.valor_pc || 0);
-                    let st = String(dat.status_cliente || '').toUpperCase();
-                    if (st.includes('QUITADO') || st.includes('PAGANTE')) quitados++;
-                    if (st.includes('INADIMPLENTE') || st.includes('CANCELADO') || st.includes('NEGATIVADO')) inadimplentes++;
+                    
+                    let st = String(dat.status_cliente || 'QUITADO').toUpperCase().trim();
+                    if (st.includes('PAGANTE')) pagantes++;
+                    else if (st.includes('QUITADO')) quitados++;
+                    else if (st.includes('INADIMPLENTE') || st.includes('NEGATIVADO')) inadimplentes++;
+                    else if (st.includes('CANCELADO')) cancelados++;
+                    else quitados++; // padrão
+
                     ultimosClientes.push({ cliente: dat.cliente, marca: dat.empresa || dat.marca, status: dat.status_cliente || 'QUITADO', valor: dat.valor_pc || 0, telefone: dat.telefone || '' });
                 });
 
@@ -485,10 +435,15 @@
                 cacheMensal = [];
                 snapMensal.forEach(d => cacheMensal.push({ id: d.id, ...d.data() }));
 
+                cacheParcelas = [];
+                snapParc.forEach(d => cacheParcelas.push({ id: d.id, ...d.data() }));
+
                 // Atualizando Cards Dashboard
                 document.getElementById('dashCardTotalClientes').innerText = totalCli;
+                document.getElementById('dashCardPagantes').innerText = pagantes;
                 document.getElementById('dashCardQuitados').innerText = quitados;
                 document.getElementById('dashCardInadimplentes').innerText = inadimplentes;
+                document.getElementById('dashCardCancelados').innerText = cancelados;
                 document.getElementById('dashCardValorTotal').innerText = `R$ ${valorTotalPc.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
                 document.getElementById('dashCardArrecadado').innerText = `R$ ${totalPago.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
                 document.getElementById('dashCardRpi').innerText = snapRpi.size;
@@ -498,8 +453,9 @@
                 ultimosClientes.slice(-10).reverse().forEach(item => {
                     let corSt = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
                     let stU = String(item.status).toUpperCase();
-                    if(stU.includes('INADIMPLENTE')) corSt = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-                    if(stU.includes('CANCELADO') || stU.includes('NEGATIVADO')) corSt = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+                    if(stU.includes('PAGANTE')) corSt = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+                    if(stU.includes('INADIMPLENTE') || stU.includes('NEGATIVADO')) corSt = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+                    if(stU.includes('CANCELADO')) corSt = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
 
                     tabelaUltimos.innerHTML += `
                         <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
@@ -516,10 +472,10 @@
                 chartStatusInstance = new Chart(ctxStatus, {
                     type: 'doughnut',
                     data: {
-                        labels: ['Quitados / Pagantes', 'Inadimplentes / Outros'],
+                        labels: ['Pagantes', 'Quitados', 'Inadimplentes', 'Cancelados'],
                         datasets: [{
-                            data: [quitados, Math.max(0, totalCli - quitados)],
-                            backgroundColor: ['#10B981', '#F59E0B'],
+                            data: [pagantes, quitados, inadimplentes, cancelados],
+                            backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444'],
                             borderWidth: 0
                         }]
                     },
@@ -562,10 +518,7 @@
             const dropdown = document.getElementById('dropdownBuscaGlobal');
             const conteudo = document.getElementById('conteudoBuscaGlobal');
 
-            if (termo.length < 2) {
-                dropdown.classList.add('hidden');
-                return;
-            }
+            if (termo.length < 2) { dropdown.classList.add('hidden'); return; }
 
             dropdown.classList.remove('hidden');
             let resultadosHTML = '';
@@ -591,27 +544,11 @@
                 });
             }
 
-            const resCob = cacheCobrancas.filter(c => String(c.cliente_id || '').toLowerCase().includes(termo) || String(c.marca || '').toLowerCase().includes(termo) || String(c.cnpj || '').toLowerCase().includes(termo)).slice(0, 5);
+            const resCob = cacheCobrancas.filter(c => String(c.cliente_id || '').toLowerCase().includes(termo) || String(c.marca || '').toLowerCase().includes(termo)).slice(0, 5);
             if (resCob.length > 0) {
                 resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Faturamento (${resCob.length})</div>`;
                 resCob.forEach(c => {
                     resultadosHTML += `<button onclick="irParaResultado('cobrancas')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group"><div><p class="text-xs font-semibold text-emerald-400">R$ ${Number(c.valor_total || 0).toFixed(2)} - ${c.cliente_id}</p><p class="text-[10px] text-slate-400">Marca: ${c.marca || '-'} | Vencimento: Dia ${c.dia_vencimento}</p></div><span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span></button>`;
-                });
-            }
-
-            const resParcelas = cacheParcelas.filter(c => String(c.cliente || '').toLowerCase().includes(termo) || String(c.marca || '').toLowerCase().includes(termo)).slice(0, 5);
-            if (resParcelas.length > 0) {
-                resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Planilha de Parcelas (${resParcelas.length})</div>`;
-                resParcelas.forEach(c => {
-                    resultadosHTML += `<button onclick="irParaResultado('parcelas')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group"><div><p class="text-xs font-semibold text-blue-300">R$ ${Number(c.valor_parcela || 0).toFixed(2)} - ${c.cliente}</p><p class="text-[10px] text-slate-400">Marca: ${c.marca || '-'} | Parcela: ${c.parcelas_pagas}/${c.qtd_parcelas}</p></div><span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span></button>`;
-                });
-            }
-
-            const resGRU = cacheGRU.filter(c => String(c.cliente || '').toLowerCase().includes(termo) || String(c.marca || '').toLowerCase().includes(termo)).slice(0, 5);
-            if (resGRU.length > 0) {
-                resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Guias GRU (${resGRU.length})</div>`;
-                resGRU.forEach(c => {
-                    resultadosHTML += `<button onclick="irParaResultado('gru')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group"><div><p class="text-xs font-semibold text-white group-hover:text-brand-gold">${c.cliente}</p><p class="text-[10px] text-slate-400">Marca: ${c.marca || '-'} | Vencimento: ${c.vencimento}</p></div><span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span></button>`;
                 });
             }
 
@@ -631,58 +568,6 @@
                 document.getElementById('dropdownBuscaGlobal')?.classList.add('hidden');
             }
         });
-
-        // ------------------ PARCELAS (NOVO MÓDULO) ------------------
-        window.carregarParcelas = async function() {
-            const tabela = document.getElementById('tabelaParcelas');
-            tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando parcelas...</td></tr>`;
-            try {
-                const querySnapshot = await getDocs(collection(db, "parcelas"));
-                cacheParcelas = [];
-                tabela.innerHTML = '';
-                if (querySnapshot.empty) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro encontrado.</td></tr>`; return; }
-                querySnapshot.forEach((doc) => { cacheParcelas.push({id: doc.id, ...doc.data()}); });
-                renderizarTabelaParcelas(cacheParcelas);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-rose-400 text-xs">Erro ao carregar parcelas.</td></tr>`; }
-        }
-
-        window.renderizarTabelaParcelas = function(dados) {
-            const tabela = document.getElementById('tabelaParcelas');
-            tabela.innerHTML = '';
-            if (dados.length === 0) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro encontrado.</td></tr>`; return; }
-            let html = '';
-            dados.slice(0, 500).forEach(data => {
-                let badgeClass = data.status.toUpperCase().includes('PAGO') ? 'text-emerald-400' : 'text-amber-400';
-                html += `<tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
-                    <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td>
-                    <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.marca || ''}</td>
-                    <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.vencimento || '-'}</td>
-                    <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-semibold">R$ ${Number(data.valor_parcela || 0).toFixed(2)}</td>
-                    <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.parcelas_pagas || 0} / ${data.qtd_parcelas || 1}</td>
-                    <td class="px-4 md:px-6 py-3.5 text-xs font-semibold ${badgeClass}">${data.status || 'PENDENTE'}</td>
-                    <td class="px-4 md:px-6 py-3.5 text-xs text-right space-x-2">
-                        <button onclick="excluirParcela('${data.id}')" class="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-[11px] font-medium rounded-lg transition-all border border-rose-500/20">Excluir</button>
-                    </td>
-                </tr>`;
-            });
-            tabela.innerHTML = html;
-        }
-
-        window.filtrarParcelas = function() {
-            const termo = document.getElementById('buscaParcelas').value.toLowerCase();
-            const filtrados = cacheParcelas.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.marca || '').toLowerCase().includes(termo));
-            renderizarTabelaParcelas(filtrados);
-        }
-        
-        window.excluirParcela = async function(docId) {
-            if (!confirm("Tem certeza que deseja excluir esta parcela?")) return;
-            try { 
-                await deleteDoc(doc(db, "parcelas", docId)); 
-                await registrarLog(`Parcela excluída ID: ${docId}`);
-                carregarParcelas(); 
-            } catch (e) { alert("Erro ao excluir."); }
-        }
-        // -------------------------------------------------------------
 
         window.carregarCobrancas = async function(dia) {
             cicloAtual = dia;
@@ -774,10 +659,7 @@
                     valor_pago: valorPago, status_pagamento: status
                 });
                 await registrarLog(`Cobrança cadastrada para ${cliente}`);
-                
-                // SINCRONIZAÇÃO AUTOMÁTICA
                 await window.sincronizarClientesGlobais([{ cliente: cliente, marca: marca, valor_pc: valor }]);
-                
                 alert("Cobrança cadastrada com sucesso!");
                 fecharModalCobranca();
                 document.getElementById('formCobrancaManual').reset();
@@ -796,8 +678,8 @@
 
         window.gerarRelatorioCobrancas = function() {
             let janela = window.open('', '_blank');
-            if (!janela) { alert("Permita pop-ups no navegador para gerar o relatório."); return; }
-            janela.document.write(`<html><head><title>Relatório de Faturamento - Ciclo Dia ${cicloAtual}</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Relatório Executivo de Faturamento</h1><p class="text-xs text-slate-400 mb-6">Ciclo Vencimento Dia ${cicloAtual} | Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Marca</th><th class="border border-slate-800 p-2.5">Valor Parcela</th><th class="border border-slate-800 p-2.5">Valor Pago</th><th class="border border-slate-800 p-2.5">Status</th></tr>`);
+            if (!janela) { alert("Permita pop-ups."); return; }
+            janela.document.write(`<html><head><title>Relatório de Faturamento</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Relatório Executivo de Faturamento</h1><p class="text-xs text-slate-400 mb-6">Ciclo Vencimento Dia ${cicloAtual} | Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Marca</th><th class="border border-slate-800 p-2.5">Valor Parcela</th><th class="border border-slate-800 p-2.5">Valor Pago</th><th class="border border-slate-800 p-2.5">Status</th></tr>`);
             cacheCobrancas.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente_id}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.marca || '-'}</td><td class="border border-slate-800 p-2.5">R$ ${Number(c.valor_total||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 text-emerald-400 font-semibold">R$ ${Number(c.valor_pago||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.status_pagamento}</td></tr>`); });
             janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-5 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
@@ -812,7 +694,7 @@
             let novoStatus = novasPagas >= totalParcelas ? 'pago' : 'pendente';
             try {
                 await updateDoc(doc(db, "cobrancas", docId), { parcelas_pagas: novasPagas, valor_pago: novoValorPago, status_pagamento: novoStatus });
-                await registrarLog(`Parcelas atualizadas ID: ${docId} para ${novasPagas}/${totalParcelas}`);
+                await registrarLog(`Parcelas atualizadas ID: ${docId}`);
                 carregarCobrancas(cicloAtual);
             } catch (err) { alert("Erro ao atualizar."); }
         }
@@ -829,11 +711,11 @@
             try {
                 const querySnapshot = await getDocs(collection(db, "clientes"));
                 cacheClientes = [];
-                let totalCli = 0, quitadoCount = 0, inadimplenteCount = 0;
+                let totalCli = 0, pagantes = 0, quitados = 0, inadimplentes = 0, cancelados = 0;
 
                 if (querySnapshot.empty) {
                     tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum cliente. Importe a planilha correspondente.</td></tr>`;
-                    atualizarDashboardClientes(0, 0, 0);
+                    atualizarDashboardClientes(0, 0, 0, 0, 0);
                     return;
                 }
 
@@ -841,13 +723,16 @@
                     totalCli++;
                     const data = docSnap.data();
                     cacheClientes.push({ id: docSnap.id, ...data });
-                    let st = String(data.status_cliente || '').toUpperCase();
-                    if (st.includes('QUITADO') || st.includes('PAGANTE')) quitadoCount++;
-                    if (st.includes('INADIMPLENTE') || st.includes('NEGATIVADO') || st.includes('CANCELADO')) inadimplenteCount++;
+                    let st = String(data.status_cliente || 'QUITADO').toUpperCase().trim();
+                    if (st.includes('PAGANTE')) pagantes++;
+                    else if (st.includes('QUITADO')) quitados++;
+                    else if (st.includes('INADIMPLENTE') || st.includes('NEGATIVADO')) inadimplentes++;
+                    else if (st.includes('CANCELADO')) cancelados++;
+                    else quitados++;
                 });
 
                 renderizarTabelaClientes(cacheClientes);
-                atualizarDashboardClientes(totalCli, quitadoCount, inadimplenteCount);
+                atualizarDashboardClientes(totalCli, pagantes, quitados, inadimplentes, cancelados);
             } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-rose-400 text-xs">Erro ao carregar.</td></tr>`; }
         }
 
@@ -857,10 +742,13 @@
             if (dados.length === 0) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro.</td></tr>`; return; }
             let html = '';
             dados.slice(0, 500).forEach(data => {
-                let st = String(data.status_cliente || 'QUITADO').toUpperCase();
+                let st = String(data.status_cliente || 'QUITADO').toUpperCase().trim();
                 let corStatus = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-                if (st.includes('INADIMPLENTE')) corStatus = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-                if (st.includes('NEGATIVADO') || st.includes('CANCELADO')) corStatus = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+                
+                if (st.includes('PAGANTE')) corStatus = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+                else if (st.includes('INADIMPLENTE') || st.includes('NEGATIVADO')) corStatus = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+                else if (st.includes('CANCELADO')) corStatus = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+
                 let badgeStatus = `<span class="px-2.5 py-1 text-[10px] font-semibold ${corStatus} rounded-md border">${data.status_cliente || 'QUITADO'}</span>`;
 
                 html += `
@@ -953,10 +841,12 @@
             janela.document.close();
         }
 
-        function atualizarDashboardClientes(total, quitados, inadimplentes) {
+        function atualizarDashboardClientes(total, pagantes, quitados, inadimplentes, cancelados) {
             document.getElementById('dashTotalCli').innerText = total;
+            document.getElementById('dashPagantes').innerText = pagantes;
             document.getElementById('dashQuitados').innerText = quitados;
             document.getElementById('dashInadimplentes').innerText = inadimplentes;
+            document.getElementById('dashCancelados').innerText = cancelados;
         }
 
         window.carregarRPI = async function() {
@@ -1101,6 +991,45 @@
             if (!janela) { alert("Permita pop-ups."); return; }
             janela.document.write(`<html><head><title>Relatório Base Administrativo</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Base Administrativo</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Marca</th><th class="border border-slate-800 p-2.5">Data</th><th class="border border-slate-800 p-2.5">Valor</th><th class="border border-slate-800 p-2.5">Status</th></tr>`);
             cacheMensal.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.marca}</td><td class="border border-slate-800 p-2.5">${c.data_pagamento}</td><td class="border border-slate-800 p-2.5 text-emerald-400 font-semibold">R$ ${Number(c.valor||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.status}</td></tr>`); });
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-5 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.close();
+        }
+
+        window.carregarParcelas = async function() {
+            const tabela = document.getElementById('tabelaParcelas');
+            tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando parcelas...</td></tr>`;
+            try {
+                const querySnapshot = await getDocs(collection(db, "parcelas"));
+                cacheParcelas = [];
+                tabela.innerHTML = '';
+                if (querySnapshot.empty) { tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro de parcelas. Importe a planilha.</td></tr>`; return; }
+                querySnapshot.forEach((docSnap) => { cacheParcelas.push({ id: docSnap.id, ...docSnap.data() }); });
+                renderizarTabelaParcelas(cacheParcelas);
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-rose-400 text-xs">Erro ao carregar.</td></tr>`; }
+        }
+
+        window.renderizarTabelaParcelas = function(dados) {
+            const tabela = document.getElementById('tabelaParcelas');
+            tabela.innerHTML = '';
+            if (dados.length === 0) { tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro encontrado.</td></tr>`; return; }
+            let html = '';
+            dados.slice(0, 500).forEach(data => {
+                html += `<tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors"><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.marca || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-300">${data.parcela || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-brand-gold font-semibold">R$ ${Number(data.valor || 0).toFixed(2)}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.vencimento || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs font-semibold text-emerald-400">${data.status || 'PAGO'}</td></tr>`;
+            });
+            tabela.innerHTML = html;
+        }
+
+        window.filtrarParcelas = function() {
+            const termo = document.getElementById('buscaParcelas').value.toLowerCase();
+            const filtrados = cacheParcelas.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.marca || '').toLowerCase().includes(termo));
+            renderizarTabelaParcelas(filtrados);
+        }
+
+        window.gerarRelatorioParcelas = function() {
+            let janela = window.open('', '_blank');
+            if (!janela) { alert("Permita pop-ups."); return; }
+            janela.document.write(`<html><head><title>Relatório Planilha de Parcelas</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Planilha de Parcelas</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Marca</th><th class="border border-slate-800 p-2.5">Parcela</th><th class="border border-slate-800 p-2.5">Valor</th><th class="border border-slate-800 p-2.5">Vencimento</th><th class="border border-slate-800 p-2.5">Status</th></tr>`);
+            cacheParcelas.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.marca}</td><td class="border border-slate-800 p-2.5">${c.parcela}</td><td class="border border-slate-800 p-2.5 text-brand-gold font-semibold">R$ ${Number(c.valor||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5">${c.vencimento}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.status}</td></tr>`); });
             janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-5 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
         }
@@ -1256,13 +1185,12 @@
                         if (contadorOp > 0) { await batch.commit(); }
                     }
 
-                    // 1. FATURAMENTO (COBRANÇAS)
+                    // 1. COBRANÇAS
                     if (modulo === 'cobrancas') {
                         let itensCobranca = [];
                         for (let nomeAba of workbook.SheetNames) {
                             const aba = workbook.Sheets[nomeAba];
                             const json = XLSX.utils.sheet_to_json(aba);
-                            
                             const diaVencimento = nomeAba.includes('20') ? 20 : 5; 
                             
                             for (let linha of json) {
@@ -1296,9 +1224,13 @@
                         for (let nomeAba of workbook.SheetNames) {
                             const aba = workbook.Sheets[nomeAba];
                             const json = XLSX.utils.sheet_to_json(aba);
+                            const upperAba = nomeAba.toUpperCase();
                             
-                            const isCancelados = nomeAba.toUpperCase().includes('CANCELADO');
-                            
+                            let defaultStatus = 'QUITADO';
+                            if (upperAba.includes('CANCELADO')) defaultStatus = 'CANCELADO';
+                            if (upperAba.includes('INADIMPLENTE')) defaultStatus = 'INADIMPLENTE';
+                            if (upperAba.includes('PAGANTE')) defaultStatus = 'PAGANTE';
+
                             for (let linha of json) {
                                 let cli = String(linha['CLIENTE'] || linha['Cliente'] || linha['NOME'] || '').trim();
                                 if (!cli) continue;
@@ -1306,7 +1238,7 @@
                                 let telefone = String(linha['TEL.'] || linha['Tel'] || linha['TELEFONE'] || '').trim();
                                 let valorPc = parseFloat(String(linha['VALOR PC'] || linha['Valor Pc'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
                                 
-                                let statusCli = String(linha['STATUS'] || linha['Status'] || (isCancelados ? 'CANCELADO' : 'QUITADO')).trim();
+                                let statusCli = String(linha['STATUS'] || linha['Status'] || defaultStatus).trim().toUpperCase();
                                 let anuidade = String(linha['ANUIDADE'] || linha['Anuidade'] || '').trim();
                                 
                                 itensClientes.push({ cliente: cli, empresa: empresa, marca: empresa, telefone: telefone, valor_pc: valorPc, status_cliente: statusCli, anuidade: anuidade });
@@ -1386,7 +1318,7 @@
                         carregarMensal();
                     }
 
-                    // 6. PLANILHA DE PARCELAS (NOVO)
+                    // 6. PLANILHA DE PARCELAS
                     if (modulo === 'parcelas') {
                         let itensParcelas = [];
                         for (let nomeAba of workbook.SheetNames) {
@@ -1396,26 +1328,15 @@
                                 let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
                                 if (!cli) continue;
                                 let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
-                                let quantPar = String(linha['QTD PARCELAS'] || linha['QUANT PAR'] || linha['Parcelas'] || '1').trim();
-                                let pagas = String(linha['PAGAS'] || linha['Pagas'] || linha['PARCELAS PAGAS'] || '0').trim();
-                                let valor = parseFloat(String(linha['VALOR PARCELA'] || linha['Valor'] || linha['VALOR'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+                                let parcela = String(linha['PARCELA'] || linha['Parcela'] || '-').trim();
+                                let valor = parseFloat(String(linha['VALOR'] || linha['Valor'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
                                 let vencimento = String(linha['VENCIMENTO'] || linha['Vencimento'] || '-').trim();
-                                let status = String(linha['STATUS'] || linha['Status'] || 'PENDENTE').trim();
-
-                                itensParcelas.push({ 
-                                    cliente: cli, 
-                                    marca: marca, 
-                                    valor_parcela: valor, 
-                                    qtd_parcelas: quantPar,
-                                    parcelas_pagas: pagas,
-                                    vencimento: vencimento,
-                                    status: status
-                                });
+                                let status = String(linha['STATUS'] || linha['Status'] || 'PAGO').trim();
+                                itensParcelas.push({ cliente: cli, marca: marca, parcela: parcela, valor: valor, vencimento: vencimento, status: status });
                             }
                         }
-                        await executarEmLotes("parcelas", itensParcelas, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}`.toUpperCase());
+                        await executarEmLotes("parcelas", itensParcelas, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.parcela || '').trim()}`.toUpperCase());
                         await registrarLog("Planilha de Parcelas importada (Todas as abas)");
-                        // AQUI CHAMA A SINCRONIZAÇÃO AUTOMÁTICA
                         await window.sincronizarClientesGlobais(itensParcelas);
                         carregarParcelas();
                     }
@@ -1434,7 +1355,6 @@
 </head>
 <body class="bg-brand-dark min-h-screen flex flex-col md:flex-row font-sans text-slate-200 antialiased selection:bg-brand-gold selection:text-brand-dark">
 
-    <!-- TELA DE LOGIN / CADASTRO / REDEFINIÇÃO -->
     <div id="tela-login" class="fixed inset-0 bg-brand-dark z-50 flex items-center justify-center p-4">
         <div class="bg-brand-card rounded-3xl shadow-2xl p-8 max-w-sm w-full border border-brand-border text-center relative overflow-hidden backdrop-blur-xl">
             <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-transparent via-brand-gold to-transparent"></div>
@@ -1497,13 +1417,10 @@
         </div>
     </div>
 
-    <!-- APLICAÇÃO PRINCIPAL -->
     <div id="app-container" class="hidden flex w-full min-h-screen">
         
-        <!-- OVERLAY PARA MOBILE QUANDO MENU ESTIVER ABERTO -->
         <div id="sidebar-overlay" onclick="toggleMenuMobile()" class="fixed inset-0 bg-slate-950/80 z-30 hidden md:hidden backdrop-blur-sm"></div>
 
-        <!-- MENU LATERAL RETRÁTIL -->
         <aside id="sidebar-menu" class="w-60 bg-brand-card text-white h-screen flex flex-col fixed inset-y-0 left-0 shadow-2xl z-40 border-r border-brand-border transform -translate-x-full md:translate-x-0 transition-transform duration-300">
             <div class="p-4 border-b border-brand-border flex items-center justify-between bg-brand-dark">
                 <div class="flex items-center gap-3">
@@ -1513,7 +1430,6 @@
                         <p class="text-[8px] text-brand-gold uppercase tracking-[0.2em] font-bold">Executive</p>
                     </div>
                 </div>
-                <!-- Botão fechar menu no mobile -->
                 <button onclick="toggleMenuMobile()" class="md:hidden text-slate-400 hover:text-white text-lg px-2">✕</button>
             </div>
             
@@ -1525,13 +1441,13 @@
                 <button id="btn-cobrancas" onclick="abrirAba('cobrancas')" class="btn-menu w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:bg-[#132238] rounded-xl font-medium text-xs transition-all text-left">
                     <span>📊</span> Faturamento (5 & 20)
                 </button>
-                <button id="btn-parcelas" onclick="abrirAba('parcelas')" class="btn-menu w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:bg-[#132238] rounded-xl font-medium text-xs transition-all text-left">
-                    <span>📅</span> Planilha de Parcelas
-                </button>
                 
                 <p class="text-[9px] uppercase font-bold text-slate-500 tracking-wider px-3 mt-4 mb-1.5">Gestão</p>
                 <button id="btn-clientes" onclick="abrirAba('clientes')" class="btn-menu w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:bg-[#132238] rounded-xl font-medium text-xs transition-all text-left">
                     <span>👥</span> Base Marcas
+                </button>
+                <button id="btn-parcelas" onclick="abrirAba('parcelas')" class="btn-menu w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:bg-[#132238] rounded-xl font-medium text-xs transition-all text-left">
+                    <span>📋</span> Planilha de Parcelas
                 </button>
                 <button id="btn-rpi" onclick="abrirAba('rpi')" class="btn-menu w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:bg-[#132238] rounded-xl font-medium text-xs transition-all text-left">
                     <span>📖</span> Revistas RPI
@@ -1568,25 +1484,18 @@
             </div>
         </aside>
 
-        <!-- CONTEÚDO PRINCIPAL (COM BARRA GLOBAL UNIFICADA) -->
         <main class="flex-1 w-full md:ml-60 bg-brand-dark min-h-screen flex flex-col">
 
-            <!-- BARRA SUPERIOR UNIFICADA COM BUSCA GLOBAL (DESKTOP E MOBILE) -->
             <header class="bg-brand-card border-b border-brand-border px-4 py-3 flex flex-wrap md:flex-nowrap items-center justify-between sticky top-0 z-30 gap-3">
-                <!-- Controles Mobile -->
                 <div class="flex items-center gap-3 md:hidden">
                     <button onclick="toggleMenuMobile()" class="text-brand-gold text-xl font-bold p-1 bg-brand-dark px-2.5 py-1 rounded-lg border border-brand-border">☰</button>
                     <span class="font-extrabold text-white text-xs tracking-wider">KRONOS GS</span>
                 </div>
                 
-                <!-- Input Busca Global -->
                 <div class="relative w-full md:max-w-2xl mx-auto md:ml-4">
-                    <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                        <span class="text-slate-400">🔍</span>
-                    </div>
+                    <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none"><span class="text-slate-400">🔍</span></div>
                     <input type="text" id="inputBuscaGlobal" onkeyup="executarBuscaGlobal()" placeholder="Busca Global: Cliente, Marca, Processo ou CNPJ..." class="w-full pl-9 pr-4 py-2 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold transition-all shadow-inner placeholder-slate-500">
                     
-                    <!-- Dropdown Resultados -->
                     <div id="dropdownBuscaGlobal" class="hidden absolute top-full left-0 mt-2 w-full max-h-[70vh] overflow-y-auto bg-brand-card border border-brand-border rounded-xl shadow-2xl z-50 divide-y divide-brand-border/50">
                         <div id="conteudoBuscaGlobal" class="p-2 space-y-2"></div>
                     </div>
@@ -1599,7 +1508,6 @@
 
             <div class="p-4 md:p-8 flex-1">
 
-                <!-- MODAL CLIENTE -->
                 <div id="modalCliente" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
                     <div class="bg-brand-card rounded-3xl shadow-2xl max-w-lg w-full p-7 border border-brand-border relative text-white">
                         <h3 id="modalClienteTitulo" class="text-base font-bold text-white mb-5">Novo Registro</h3>
@@ -1627,10 +1535,10 @@
                                 <div>
                                     <label class="block text-[10px] font-bold text-slate-400 uppercase">Status</label>
                                     <select id="cliStatusCli" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold">
+                                        <option value="PAGANTE">PAGANTE</option>
                                         <option value="QUITADO">QUITADO</option>
                                         <option value="INADIMPLENTE">INADIMPLENTE</option>
                                         <option value="CANCELADO">CANCELADO</option>
-                                        <option value="NEGATIVADO">NEGATIVADO</option>
                                     </select>
                                 </div>
                                 <div>
@@ -1646,7 +1554,6 @@
                     </div>
                 </div>
 
-                <!-- MODAL COBRANÇA -->
                 <div id="modalCobranca" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
                     <div class="bg-brand-card rounded-3xl shadow-2xl max-w-lg w-full p-7 border border-brand-border relative text-white">
                         <h3 class="text-base font-bold text-white mb-5">Nova Cobrança / Faturamento</h3>
@@ -1694,55 +1601,55 @@
                     </div>
                 </div>
 
-                <!-- ABA 0: DASHBOARD GERAL -->
                 <div id="aba-dashboard" class="aba-conteudo block">
                     <div class="flex justify-between items-center mb-6">
                         <div>
                             <h2 class="text-xl font-extrabold text-white tracking-tight">Dashboard Executivo</h2>
-                            <p class="text-slate-400 text-xs mt-0.5">Visão consolidada do faturamento, carteira de clientes e processos.</p>
+                            <p class="text-slate-400 text-xs mt-0.5">Visão consolidada do faturamento, carteira de clientes segmentada e processos.</p>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-5">
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-brand-gold/40 transition-all relative overflow-hidden">
-                            <div class="absolute top-0 right-0 p-3 text-brand-gold opacity-10 text-3xl">👥</div>
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total de Clientes</p>
-                            <p id="dashCardTotalClientes" class="text-2xl font-black text-white mt-1.5">0</p>
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3.5 mb-5">
+                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border hover:border-brand-gold/40 transition-all relative overflow-hidden">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total Clientes</p>
+                            <p id="dashCardTotalClientes" class="text-xl font-black text-white mt-1">0</p>
                         </div>
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-emerald-500/40 transition-all relative overflow-hidden">
-                            <div class="absolute top-0 right-0 p-3 text-emerald-400 opacity-10 text-3xl">✅</div>
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Quitados / Pagantes</p>
-                            <p id="dashCardQuitados" class="text-2xl font-black text-emerald-400 mt-1.5">0</p>
+                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border hover:border-blue-500/40 transition-all relative overflow-hidden">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Pagantes</p>
+                            <p id="dashCardPagantes" class="text-xl font-black text-blue-400 mt-1">0</p>
                         </div>
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-amber-500/40 transition-all relative overflow-hidden">
-                            <div class="absolute top-0 right-0 p-3 text-amber-400 opacity-10 text-3xl">⚠️</div>
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Inadimplentes / Cancelados</p>
-                            <p id="dashCardInadimplentes" class="text-2xl font-black text-amber-400 mt-1.5">0</p>
+                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border hover:border-emerald-500/40 transition-all relative overflow-hidden">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Quitados</p>
+                            <p id="dashCardQuitados" class="text-xl font-black text-emerald-400 mt-1">0</p>
+                        </div>
+                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border hover:border-amber-500/40 transition-all relative overflow-hidden">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Inadimplentes</p>
+                            <p id="dashCardInadimplentes" class="text-xl font-black text-amber-400 mt-1">0</p>
+                        </div>
+                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border hover:border-rose-500/40 transition-all relative overflow-hidden col-span-2 md:col-span-1">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Cancelados</p>
+                            <p id="dashCardCancelados" class="text-xl font-black text-rose-400 mt-1">0</p>
                         </div>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-brand-gold/40 transition-all relative overflow-hidden">
-                            <div class="absolute top-0 right-0 p-3 text-brand-gold opacity-10 text-3xl">💰</div>
+                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-brand-gold/40 transition-all">
                             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Valor Total de Parcelas (PC)</p>
                             <p id="dashCardValorTotal" class="text-xl font-black text-brand-gold mt-1.5">R$ 0,00</p>
                         </div>
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-emerald-500/40 transition-all relative overflow-hidden">
-                            <div class="absolute top-0 right-0 p-3 text-emerald-400 opacity-10 text-3xl">📥</div>
+                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-emerald-500/40 transition-all">
                             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total Arrecadado (Faturamento)</p>
                             <p id="dashCardArrecadado" class="text-xl font-black text-emerald-400 mt-1.5">R$ 0,00</p>
                         </div>
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-blue-500/40 transition-all relative overflow-hidden">
-                            <div class="absolute top-0 right-0 p-3 text-blue-400 opacity-10 text-3xl">📖</div>
+                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-blue-500/40 transition-all">
                             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Processos INPI (RPI)</p>
                             <p id="dashCardRpi" class="text-xl font-black text-blue-400 mt-1.5">0</p>
                         </div>
                     </div>
 
-                    <!-- GRÁFICOS INTERATIVOS -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
                         <div class="bg-brand-card p-5 rounded-2xl border border-brand-border shadow-sm">
-                            <h3 class="font-bold text-white text-xs uppercase tracking-wider mb-4">Status da Carteira de Clientes</h3>
+                            <h3 class="font-bold text-white text-xs uppercase tracking-wider mb-4">Segmentação da Carteira de Clientes</h3>
                             <div class="h-60 relative flex justify-center items-center">
                                 <canvas id="chartStatusClientes"></canvas>
                             </div>
@@ -1780,7 +1687,6 @@
                     </div>
                 </div>
 
-                <!-- ABA 1: COBRANÇAS -->
                 <div id="aba-cobrancas" class="aba-conteudo hidden">
                     <div class="flex justify-between items-center mb-6">
                         <div>
@@ -1841,67 +1747,34 @@
                     </div>
                 </div>
 
-                <!-- ABA 1.5: PARCELAS (NOVO) -->
-                <div id="aba-parcelas" class="aba-conteudo hidden">
-                    <div class="flex justify-between items-center mb-6">
-                        <div>
-                            <h2 class="text-xl font-extrabold text-white tracking-tight">Planilha de Parcelas</h2>
-                            <p class="text-slate-400 text-xs mt-0.5">Gestão dedicada e visão detalhada dos recebimentos fracionados.</p>
-                        </div>
-                    </div>
-
-                    <div class="bg-brand-card p-4 rounded-t-2xl border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
-                        <input type="text" id="buscaParcelas" onkeyup="filtrarParcelas()" placeholder="🔍 Buscar cliente ou marca..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48 md:w-64">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <button onclick="exportarParaExcel('Planilha_Parcelas', cacheParcelas)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
-                            <input type="file" id="upParcelas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'parcelas')" />
-                            <label for="upParcelas" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs">
-                                <span id="upParcelasText">Importar Tabela</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="bg-brand-card rounded-b-2xl shadow-sm border border-brand-border overflow-hidden">
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-brand-border">
-                                <thead class="bg-[#132238]">
-                                    <tr>
-                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
-                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Marca</th>
-                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vencimento</th>
-                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Valor Parc.</th>
-                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Parcelas</th>
-                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                                        <th class="px-4 md:px-6 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tabelaParcelas" class="divide-y divide-brand-border/40"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ABA 2: BASE MARCAS -->
                 <div id="aba-clientes" class="aba-conteudo hidden">
                     <div class="flex justify-between items-center mb-6">
                         <div>
                             <h2 class="text-xl font-extrabold text-white tracking-tight">Base Marcas Financeiro</h2>
-                            <p class="text-slate-400 text-xs mt-0.5">Gestão de Empresas, Clientes, Telefones, Valores e Status.</p>
+                            <p class="text-slate-400 text-xs mt-0.5">Gestão segmentada de Pagantes, Quitados, Inadimplentes e Cancelados.</p>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-brand-gold">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total de Registros</p>
-                            <p id="dashTotalCli" class="text-2xl font-black text-white mt-1.5">0</p>
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3.5 mb-6">
+                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-brand-gold">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total</p>
+                            <p id="dashTotalCli" class="text-xl font-black text-white mt-1">0</p>
                         </div>
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-emerald-500">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Quitados / Pagantes</p>
-                            <p id="dashQuitados" class="text-2xl font-black text-emerald-400 mt-1.5">0</p>
+                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-blue-500">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Pagantes</p>
+                            <p id="dashPagantes" class="text-xl font-black text-blue-400 mt-1">0</p>
                         </div>
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-amber-500">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Inadimplentes / Outros</p>
-                            <p id="dashInadimplentes" class="text-2xl font-black text-amber-400 mt-1.5">0</p>
+                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-emerald-500">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Quitados</p>
+                            <p id="dashQuitados" class="text-xl font-black text-emerald-400 mt-1">0</p>
+                        </div>
+                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-amber-500">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Inadimplentes</p>
+                            <p id="dashInadimplentes" class="text-xl font-black text-amber-400 mt-1">0</p>
+                        </div>
+                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-rose-500 col-span-2 md:col-span-1">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Cancelados</p>
+                            <p id="dashCancelados" class="text-xl font-black text-rose-400 mt-1">0</p>
                         </div>
                     </div>
 
@@ -1938,7 +1811,45 @@
                     </div>
                 </div>
 
-                <!-- ABA 3: RPI -->
+                <div id="aba-parcelas" class="aba-conteudo hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h2 class="text-xl font-extrabold text-white tracking-tight">Planilha de Parcelas</h2>
+                            <p class="text-slate-400 text-xs mt-0.5">Controle detalhado de parcelas por cliente e marca.</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-brand-card p-4 rounded-t-2xl border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
+                        <input type="text" id="buscaParcelas" onkeyup="filtrarParcelas()" placeholder="🔍 Pesquisar aba..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button onclick="gerarRelatorioParcelas()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">PDF</button>
+                            <button onclick="exportarParaExcel('Planilha_Parcelas', cacheParcelas)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
+                            <input type="file" id="upParcelas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'parcelas')" />
+                            <label for="upParcelas" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs">
+                                <span id="upParcelasText">Importar</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="bg-brand-card rounded-b-2xl shadow-sm border border-brand-border overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-brand-border">
+                                <thead class="bg-[#132238]">
+                                    <tr>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Marca</th>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Parcela</th>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Valor</th>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vencimento</th>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabelaParcelas" class="divide-y divide-brand-border/40"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="aba-rpi" class="aba-conteudo hidden">
                     <div class="flex justify-between items-center mb-6">
                         <div>
@@ -1977,7 +1888,6 @@
                     </div>
                 </div>
 
-                <!-- ABA 4: GRU -->
                 <div id="aba-gru" class="aba-conteudo hidden">
                     <div class="flex justify-between items-center mb-6">
                         <div>
@@ -2016,7 +1926,6 @@
                     </div>
                 </div>
 
-                <!-- ABA 5: BASE ADMINISTRATIVO -->
                 <div id="aba-mensal" class="aba-conteudo hidden">
                     <div class="flex justify-between items-center mb-6">
                         <div>
@@ -2055,7 +1964,6 @@
                     </div>
                 </div>
 
-                <!-- ABA EXCLUSIVA ADMIN -->
                 <div id="aba-admin" class="aba-conteudo hidden">
                     <div id="listaUsuariosAdmin"></div>
                 </div>
