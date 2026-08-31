@@ -111,6 +111,114 @@
         let cacheMensal = [];
         let cacheParcelas = [];
 
+        // Configurações do Gemini AI
+        window.salvarApiKeyGemini = function() {
+            const key = document.getElementById('inputGeminiApiKey').value.trim();
+            if (!key) { alert("Insira uma chave de API válida."); return; }
+            localStorage.setItem('kronos_gemini_api_key', key);
+            document.getElementById('statusApiKey').innerText = "Chave salva com sucesso!";
+            document.getElementById('statusApiKey').className = "text-xs text-emerald-400 font-medium";
+            setTimeout(() => { document.getElementById('statusApiKey').innerText = ""; }, 3000);
+        };
+
+        window.carregarApiKeyGemini = function() {
+            const saved = localStorage.getItem('kronos_gemini_api_key');
+            if (saved) {
+                const el = document.getElementById('inputGeminiApiKey');
+                if (el) el.value = saved;
+            }
+        };
+
+        window.enviarPerguntaAI = async function() {
+            const apiKey = localStorage.getItem('kronos_gemini_api_key');
+            if (!apiKey) {
+                alert("Configure sua chave da API do Gemini na aba Kronos AI antes de enviar perguntas.");
+                abrirAba('ai');
+                return;
+            }
+
+            const inputField = document.getElementById('aiPromptInput');
+            const promptText = inputField.value.trim();
+            if (!promptText) return;
+
+            const chatContainer = document.getElementById('aiChatHistory');
+            chatContainer.innerHTML += `
+                <div class="flex justify-end mb-3">
+                    <div class="bg-brand-gold text-brand-dark px-4 py-2.5 rounded-2xl rounded-tr-none text-xs font-medium max-w-lg shadow">
+                        ${promptText}
+                    </div>
+                </div>
+            `;
+            inputField.value = '';
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            const loadingId = 'loading-' + Date.now();
+            chatContainer.innerHTML += `
+                <div id="${loadingId}" class="flex justify-start mb-3">
+                    <div class="bg-[#132238] text-slate-300 px-4 py-2.5 rounded-2xl rounded-tl-none text-xs border border-brand-border">
+                        Analisando dados do ERP e consultando Gemini...
+                    </div>
+                </div>
+            `;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            try {
+                // Montando o contexto completo do ERP para o Gemini
+                const contextoERP = `
+                    Você é o Kronos AI, assistente executivo inteligente do ERP Kronos GS, especializado em gestão financeira, marcas, patentes e processos no INPI para escritórios jurídicos.
+                    Aqui estão os dados consolidados atuais do sistema:
+                    - Total de Clientes na Base Marcas: ${cacheClientes.length}
+                    - Resumo de Clientes: ${JSON.stringify(cacheClientes.slice(0, 30))}
+                    - Faturamento Ciclos (Cobranças): ${JSON.stringify(cacheCobrancas.slice(0, 30))}
+                    - Processos INPI (RPI): ${rpiCache.length} processos cadastrados. Amostra: ${JSON.stringify(rpiCache.slice(0, 20))}
+                    - Guias GRU: ${cacheGRU.length} guias. Amostra: ${JSON.stringify(cacheGRU.slice(0, 15))}
+                    
+                    Responda à pergunta do usuário de forma profissional, direta, objetiva e útil para a tomada de decisão executiva.
+                    Pergunta do Usuário: ${promptText}
+                `;
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: contextoERP }] }]
+                    })
+                });
+
+                const data = await response.json();
+                document.getElementById(loadingId).remove();
+
+                if (data.candidates && data.candidates[0].content.parts[0].text) {
+                    const respostaAi = data.candidates[0].content.parts[0].text;
+                    chatContainer.innerHTML += `
+                        <div class="flex justify-start mb-3">
+                            <div class="bg-[#132238] text-slate-200 px-4 py-3 rounded-2xl rounded-tl-none text-xs border border-brand-border max-w-2xl leading-relaxed shadow space-y-2">
+                                ${respostaAi.replace(/\n/g, '<br>')}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    throw new Error("Resposta inválida da API.");
+                }
+            } catch (err) {
+                console.error(err);
+                if (document.getElementById(loadingId)) document.getElementById(loadingId).remove();
+                chatContainer.innerHTML += `
+                    <div class="flex justify-start mb-3">
+                        <div class="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-4 py-2.5 rounded-2xl text-xs">
+                            Erro ao comunicar com a API do Gemini. Verifique se sua chave está correta.
+                        </div>
+                    </div>
+                `;
+            }
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        };
+
+        window.gerarAnaliseExecutivaAutomatica = function() {
+            document.getElementById('aiPromptInput').value = "Faça um resumo executivo completo da saúde financeira do escritório, destacando inadimplências, volume de processos INPI críticos (como oposições ou indeferimentos) e recomendações estratégicas.";
+            enviarPerguntaAI();
+        };
+
         window.registrarLog = async function(acaoDescricao) {
             try {
                 const user = auth.currentUser;
@@ -235,6 +343,7 @@
                 }
 
                 abrirAba('dashboard');
+                carregarApiKeyGemini();
             } else {
                 telaLogin.classList.remove('hidden');
                 appContainer.classList.add('hidden');
@@ -410,7 +519,7 @@
                     else if (st.includes('QUITADO')) quitados++;
                     else if (st.includes('INADIMPLENTE') || st.includes('NEGATIVADO')) inadimplentes++;
                     else if (st.includes('CANCELADO')) cancelados++;
-                    else quitados++; // padrão
+                    else quitados++;
 
                     ultimosClientes.push({ cliente: dat.cliente, marca: dat.empresa || dat.marca, status: dat.status_cliente || 'QUITADO', valor: dat.valor_pc || 0, telefone: dat.telefone || '' });
                 });
@@ -438,7 +547,6 @@
                 cacheParcelas = [];
                 snapParc.forEach(d => cacheParcelas.push({ id: d.id, ...d.data() }));
 
-                // Atualizando Cards Dashboard
                 document.getElementById('dashCardTotalClientes').innerText = totalCli;
                 document.getElementById('dashCardPagantes').innerText = pagantes;
                 document.getElementById('dashCardQuitados').innerText = quitados;
@@ -1185,7 +1293,6 @@
                         if (contadorOp > 0) { await batch.commit(); }
                     }
 
-                    // 1. COBRANÇAS
                     if (modulo === 'cobrancas') {
                         let itensCobranca = [];
                         for (let nomeAba of workbook.SheetNames) {
@@ -1218,7 +1325,6 @@
                         carregarCobrancas(cicloAtual);
                     }
 
-                    // 2. BASE MARCAS (CLIENTES)
                     if (modulo === 'clientes') {
                         let itensClientes = [];
                         for (let nomeAba of workbook.SheetNames) {
@@ -1249,7 +1355,6 @@
                         carregarClientes();
                     }
 
-                    // 3. RPI
                     if (modulo === 'rpi') {
                         let itensRpi = [];
                         for (let sheetName of workbook.SheetNames) {
@@ -1271,7 +1376,6 @@
                         carregarRPI();
                     }
 
-                    // 4. GUIAS GRU
                     if (modulo === 'gru') {
                         let itensGru = [];
                         for (let nomeAba of workbook.SheetNames) {
@@ -1291,7 +1395,6 @@
                         carregarGRU();
                     }
 
-                    // 5. BASE ADMINISTRATIVA
                     if (modulo === 'mensal') {
                         let itensMensal = [];
                         for (let nomeAba of workbook.SheetNames) {
@@ -1318,7 +1421,6 @@
                         carregarMensal();
                     }
 
-                    // 6. PLANILHA DE PARCELAS
                     if (modulo === 'parcelas') {
                         let itensParcelas = [];
                         for (let nomeAba of workbook.SheetNames) {
@@ -1442,7 +1544,10 @@
                     <span>📊</span> Faturamento (5 & 20)
                 </button>
                 
-                <p class="text-[9px] uppercase font-bold text-slate-500 tracking-wider px-3 mt-4 mb-1.5">Gestão</p>
+                <p class="text-[9px] uppercase font-bold text-slate-500 tracking-wider px-3 mt-4 mb-1.5">Gestão & IA</p>
+                <button id="btn-ai" onclick="abrirAba('ai')" class="btn-menu w-full flex items-center gap-2.5 px-3 py-2 text-brand-gold hover:bg-[#132238] rounded-xl font-semibold text-xs transition-all text-left border border-brand-gold/20 bg-brand-gold/5">
+                    <span>🤖</span> Kronos AI (Gemini)
+                </button>
                 <button id="btn-clientes" onclick="abrirAba('clientes')" class="btn-menu w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:bg-[#132238] rounded-xl font-medium text-xs transition-all text-left">
                     <span>👥</span> Base Marcas
                 </button>
@@ -1502,7 +1607,7 @@
                 </div>
                 
                 <div class="hidden md:block">
-                     <span class="text-[8px] text-brand-gold uppercase font-bold tracking-widest px-2 py-1 bg-brand-dark rounded border border-brand-border">Executive</span>
+                     <span class="text-[8px] text-brand-gold uppercase font-bold tracking-widest px-2 py-1 bg-brand-dark rounded border border-brand-border">Executive AI Ready</span>
                 </div>
             </header>
 
@@ -1598,6 +1703,53 @@
                                 <button type="submit" class="px-5 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark text-xs font-extrabold rounded-xl shadow">Salvar</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+
+                <!-- ABA KRONOS AI (NOVO) -->
+                <div id="aba-ai" class="aba-conteudo hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h2 class="text-xl font-extrabold text-white tracking-tight">Kronos AI (Assistente Gemini)</h2>
+                            <p class="text-slate-400 text-xs mt-0.5">Conecte sua chave da API do Gemini e converse diretamente com os dados do seu escritório.</p>
+                        </div>
+                    </div>
+
+                    <!-- Configuração da Chave da API -->
+                    <div class="bg-brand-card p-5 rounded-2xl border border-brand-border mb-6 flex flex-wrap md:flex-nowrap items-center justify-between gap-4">
+                        <div>
+                            <h3 class="font-bold text-white text-xs uppercase tracking-wider">Configuração da Chave Gemini API</h3>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Insira sua chave da API do Google AI Studio para ativar as análises inteligentes.</p>
+                        </div>
+                        <div class="flex items-center gap-2.5 w-full md:w-auto">
+                            <input type="password" id="inputGeminiApiKey" placeholder="Cole sua chave API aqui (AIzaSy...)" class="px-3.5 py-2 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold w-full md:w-72">
+                            <button onclick="salvarApiKeyGemini()" class="px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold text-xs shrink-0 shadow">Salvar Chave</button>
+                        </div>
+                    </div>
+                    <p id="statusApiKey" class="text-xs mb-4 text-center md:text-left"></p>
+
+                    <!-- Interface do Chat -->
+                    <div class="bg-brand-card rounded-2xl border border-brand-border flex flex-col h-[60vh] shadow-xl overflow-hidden">
+                        <div class="p-4 bg-[#132238] border-b border-brand-border flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <span class="text-brand-gold text-base">🤖</span>
+                                <span class="font-bold text-xs text-white uppercase tracking-wider">Chat Executivo com IA</span>
+                            </div>
+                            <button onclick="gerarAnaliseExecutivaAutomatica()" class="px-3 py-1.5 bg-brand-gold/10 hover:bg-brand-gold hover:text-brand-dark text-brand-gold text-[11px] font-semibold rounded-lg border border-brand-gold/30 transition-all">✨ Gerar Análise Executiva do Escritório</button>
+                        </div>
+                        
+                        <div id="aiChatHistory" class="flex-1 p-4 overflow-y-auto space-y-3">
+                            <div class="flex justify-start">
+                                <div class="bg-[#132238] text-slate-300 px-4 py-3 rounded-2xl rounded-tl-none text-xs border border-brand-border max-w-lg">
+                                    Olá! Sou o seu assistente Kronos AI conectado ao Gemini. Já tenho acesso aos dados carregados em suas abas (clientes, faturamento, RPI, GRU). Como posso ajudar na gestão do escritório hoje?
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-3 bg-brand-dark border-t border-brand-border flex gap-2">
+                            <input type="text" id="aiPromptInput" onkeydown="if(event.key === 'Enter') enviarPerguntaAI();" placeholder="Ex: Quais clientes estão inadimplentes? / Resuma os processos em oposição..." class="flex-1 px-4 py-2.5 rounded-xl border border-brand-border bg-brand-card text-white text-xs focus:outline-none focus:border-brand-gold">
+                            <button onclick="enviarPerguntaAI()" class="px-5 py-2.5 bg-brand-gold hover:bg-brand-goldHover text-brand-dark font-extrabold rounded-xl text-xs shadow">Enviar</button>
+                        </div>
                     </div>
                 </div>
 
