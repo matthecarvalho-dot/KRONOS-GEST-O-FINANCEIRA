@@ -91,7 +91,49 @@
             try { const user = auth.currentUser; await addDoc(collection(db, "audit_logs"), { acao: acaoDescricao, usuario: user ? user.email : 'Sistema', data: new Date().toLocaleString('pt-BR') }); } catch (e) {}
         };
 
-        /* ----- SINCRONIZAÇÃO INTELIGENTE COM A NOVA REGRA ----- */
+        /* ----- INTEGRAÇÃO GEMINI AI ----- */
+        window.analisarClienteComIA = async function(clienteNome, marca, status) {
+            // Token fornecido inserido
+            const API_KEY = "AQ.Ab8RN6KhVjh3qdTIwrwD5kJNuBJosQdCLmWtzh6OCPO9KVEaUQ"; 
+            
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+            const prompt = `Aja como um analista executivo financeiro sênior de um escritório de marcas e patentes. 
+            Faça uma análise de risco rápida e objetiva deste cliente:
+            - Cliente: ${clienteNome}
+            - Marca/Processo: ${marca}
+            - Status Financeiro Atual: ${status}
+            
+            Responda em 3 tópicos curtos:
+            1. Perfil de Risco (Baixo, Médio ou Alto).
+            2. Recomendações para o setor administrativo.
+            3. Script curto de abordagem sugerido para o WhatsApp (se necessário cobrar ou reter).`;
+
+            let btnTxt = event.target.innerText;
+            event.target.innerText = "⏳...";
+
+            try {
+                const resposta = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                
+                if (!resposta.ok) {
+                    throw new Error(`Erro na requisição: ${resposta.status}`);
+                }
+
+                const dados = await resposta.json();
+                const textoIA = dados.candidates[0].content.parts[0].text;
+                alert(`✨ ANÁLISE DA IA - ${clienteNome}\n\n${textoIA}`);
+            } catch (erro) {
+                console.error("Erro no Gemini:", erro);
+                alert("Falha de comunicação com a IA. Verifique se o token tem permissões válidas para a API do Gemini.");
+            } finally {
+                event.target.innerText = btnTxt;
+            }
+        };
+
+        /* ----- SINCRONIZAÇÃO INTELIGENTE COM A REGRA DE STATUS ----- */
         window.sincronizarClientesGlobais = async function(listaParaSincronizar) {
             if (!listaParaSincronizar || listaParaSincronizar.length === 0) return;
             try {
@@ -149,7 +191,6 @@
 
                 let mapDados = new Map();
 
-                // 1. Agregação da Planilha de Parcelas
                 parcSnap.forEach(d => {
                     let p = d.data();
                     let key = `${String(p.cliente).trim().toUpperCase()}_${String(p.marca).trim().toUpperCase()}`;
@@ -160,7 +201,6 @@
                     if(String(p.status).toUpperCase().includes('PAGO')) cliData.pagas++;
                 });
 
-                // 2. Fallback para Faturamento
                 cobSnap.forEach(d => {
                     let c = d.data();
                     let key = `${String(c.cliente_id).trim().toUpperCase()}_${String(c.marca).trim().toUpperCase()}`;
@@ -173,7 +213,7 @@
                     let cli = docSnap.data();
                     let key = `${String(cli.cliente).trim().toUpperCase()}_${String(cli.empresa || cli.marca).trim().toUpperCase()}`;
                     
-                    if(cli.status_cliente === 'CANCELADO') return; // Nunca mexe nos cancelados
+                    if(cli.status_cliente === 'CANCELADO') return; 
                     
                     let novoStatus = cli.status_cliente || 'PAGANTE';
 
@@ -186,8 +226,7 @@
                         else if (fat.pagas >= 3 && fat.pagas < fat.totais) novoStatus = 'PAGANTE';
                         else if (fat.pagas === 0) novoStatus = 'PAGANTE';
                     } else {
-                        // FIX MASTER: Remove os falsos "Quitados" inflados pelo erro de importação passado
-                        if (novoStatus === 'QUITADO') novoStatus = 'PAGANTE';
+                        if (novoStatus === 'QUITADO') novoStatus = 'PAGANTE'; // Corrige os falsos Quitados
                     }
 
                     if(novoStatus !== cli.status_cliente) {
@@ -342,12 +381,11 @@
                     const dat = d.data();
                     totalCli++; valorTotalPc += Number(dat.valor_pc || 0);
                     
-                    // FIX MASTER: Fallback agora é PAGANTE e não Quitado. Isso resolve o erro contábil instantaneamente.
                     let st = String(dat.status_cliente || 'PAGANTE').toUpperCase().trim();
                     if (st === 'QUITADO' || st.includes('QUITADO')) quitados++;
                     else if (st === 'INADIMPLENTE' || st.includes('INADIMP') || st.includes('NEGATIVADO')) inadimplentes++;
                     else if (st === 'CANCELADO' || st.includes('CANCEL')) cancelados++;
-                    else pagantes++; // DEFAULT CORRETO
+                    else pagantes++; 
 
                     ultimosClientes.push({ cliente: dat.cliente, marca: dat.empresa || dat.marca, status: st, valor: dat.valor_pc || 0 });
                 });
@@ -402,11 +440,10 @@
                     totalCli++; const data = docSnap.data();
                     let st = String(data.status_cliente || 'PAGANTE').toUpperCase().trim();
                     
-                    // FIX MASTER APLICADO AQUI TAMBÉM
                     if (st === 'QUITADO' || st.includes('QUITADO')) quitados++;
                     else if (st === 'INADIMPLENTE' || st.includes('INADIMP') || st.includes('NEGATIVADO')) inadimplentes++;
                     else if (st === 'CANCELADO' || st.includes('CANCEL')) cancelados++;
-                    else { st = 'PAGANTE'; pagantes++; } // Força Pagante visualmente se estiver em branco ou com erro
+                    else { st = 'PAGANTE'; pagantes++; } 
 
                     cacheClientes.push({ id: docSnap.id, ...data, status_cliente: st });
                 });
@@ -422,12 +459,24 @@
             let html = '';
             dados.slice(0, 500).forEach(data => {
                 let st = String(data.status_cliente).toUpperCase();
-                let corStatus = 'bg-blue-500/10 text-blue-400 border-blue-500/20'; // Default Pagante
+                let corStatus = 'bg-blue-500/10 text-blue-400 border-blue-500/20'; 
                 if (st.includes('QUITADO')) corStatus = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
                 else if (st.includes('INADIMP') || st.includes('NEGATIVADO')) corStatus = 'bg-amber-500/10 text-amber-400 border-amber-500/20 font-bold';
                 else if (st.includes('CANCELADO')) corStatus = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
 
-                html += `<tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors"><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.empresa || data.marca || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400 flex items-center gap-1.5">${data.telefone || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-semibold">R$ ${Number(data.valor_pc || 0).toFixed(2)}</td><td class="px-4 md:px-6 py-3.5 text-xs"><span class="px-2.5 py-1 text-[10px] font-semibold ${corStatus} rounded-md border">${st}</span></td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.anuidade || '-'}</td><td class="px-4 md:px-6 py-3.5 text-xs text-right space-x-2"><button onclick="abrirModalEditarCliente('${data.id}', \`${data.cliente || ''}\`, \`${data.empresa || data.marca || ''}\`, \`${data.telefone || ''}\`, ${data.valor_pc || 0}, \`${st}\`, \`${data.anuidade || ''}\`)" class="px-2.5 py-1 bg-[#132238] hover:bg-brand-gold hover:text-brand-dark text-slate-300 text-[11px] font-medium rounded-lg border border-brand-border">Editar</button><button onclick="excluirCliente('${data.id}')" class="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-[11px] font-medium rounded-lg border border-rose-500/20">Excluir</button></td></tr>`;
+                html += `<tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
+                    <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td>
+                    <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.empresa || data.marca || ''}</td>
+                    <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400 flex items-center gap-1.5">${data.telefone || ''}</td>
+                    <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-semibold">R$ ${Number(data.valor_pc || 0).toFixed(2)}</td>
+                    <td class="px-4 md:px-6 py-3.5 text-xs"><span class="px-2.5 py-1 text-[10px] font-semibold ${corStatus} rounded-md border">${st}</span></td>
+                    <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.anuidade || '-'}</td>
+                    <td class="px-4 md:px-6 py-3.5 text-xs text-right space-x-2">
+                        <button onclick="analisarClienteComIA('${data.cliente}', '${data.empresa || data.marca}', '${st}')" class="px-2 py-1 bg-purple-500/10 hover:bg-purple-500 text-purple-400 hover:text-white text-[11px] font-bold rounded-lg border border-purple-500/20 transition-all" title="Analisar Risco Financeiro">✨ IA</button>
+                        <button onclick="abrirModalEditarCliente('${data.id}', \`${data.cliente || ''}\`, \`${data.empresa || data.marca || ''}\`, \`${data.telefone || ''}\`, ${data.valor_pc || 0}, \`${st}\`, \`${data.anuidade || ''}\`)" class="px-2.5 py-1 bg-[#132238] hover:bg-brand-gold hover:text-brand-dark text-slate-300 text-[11px] font-medium rounded-lg border border-brand-border">Editar</button>
+                        <button onclick="excluirCliente('${data.id}')" class="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-[11px] font-medium rounded-lg border border-rose-500/20">✕</button>
+                    </td>
+                </tr>`;
             });
             tabela.innerHTML = html;
         }
@@ -439,7 +488,7 @@
         window.excluirCliente = async function(docId) { if (confirm("Excluir?")) { await deleteDoc(doc(db, "clientes", docId)); carregarClientes(); } }
         window.filtrarClientes = function() { const termo = document.getElementById('buscaClientes').value.toLowerCase(); renderizarTabelaClientes(cacheClientes.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.empresa || item.marca || '').toLowerCase().includes(termo) || String(item.status_cliente || '').toLowerCase().includes(termo))); }
 
-        /* OUTRAS FUNÇÕES E MÓDULOS (Cobrancas, Parcelas, RPI, GRU, Mensal) */
+        /* MÓDULOS DE CARREGAMENTO */
         window.carregarCobrancas = async function(dia) {
             cicloAtual = dia; document.getElementById('btnDia5').className = dia === 5 ? 'px-4 py-2 bg-brand-gold text-brand-dark rounded-xl font-bold shadow-md text-xs' : 'px-4 py-2 bg-brand-card text-slate-300 border border-brand-border rounded-xl hover:bg-brand-border text-xs'; document.getElementById('btnDia20').className = dia === 20 ? 'px-4 py-2 bg-brand-gold text-brand-dark rounded-xl font-bold shadow-md text-xs' : 'px-4 py-2 bg-brand-card text-slate-300 border border-brand-border rounded-xl hover:bg-brand-border text-xs';
             const tabela = document.getElementById('tabelaCobrancas'); tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Consultando...</td></tr>`;
@@ -488,8 +537,43 @@
             try { const q = await getDocs(collection(db, "mensal")); cacheMensal = []; const t = document.getElementById('tabelaMensal'); t.innerHTML=''; q.forEach((doc) => cacheMensal.push(doc.data())); cacheMensal.slice(0, 500).forEach(d => { t.innerHTML += `<tr class="border-b border-brand-border/40 hover:bg-[#132238]/50"><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200">${d.cliente || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${d.marca || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${d.data_pagamento || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-semibold">R$ ${Number(d.valor || 0).toFixed(2)}</td><td class="px-4 md:px-6 py-3.5 text-xs font-semibold text-emerald-400">${d.status || 'PAGO'}</td></tr>`; }); } catch(e){}
         }
 
-        window.carregarPainelAdmin = async function() { /* ... admin code ... */ }
+        window.carregarPainelAdmin = async function() {
+            const container = document.getElementById('listaUsuariosAdmin');
+            container.innerHTML = `
+                <div class="bg-brand-card p-6 rounded-2xl border border-brand-border shadow-sm mb-6">
+                    <h3 class="text-base font-bold text-white">Painel de Controle do Administrador</h3>
+                    <p class="text-slate-400 mt-1 text-xs">Gerencie acessos, bloqueios e consulte a trilha de auditoria.</p>
+                </div>
+                <div class="bg-brand-card rounded-2xl shadow-sm border border-brand-border overflow-hidden mb-8">
+                    <div class="p-5 border-b border-brand-border"><h4 class="font-bold text-white text-sm">Usuários</h4></div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-brand-border">
+                            <thead class="bg-[#132238]"><tr><th class="px-4 py-3 text-left text-[11px] font-bold text-slate-400 uppercase">Nome</th><th class="px-4 py-3 text-left text-[11px] font-bold text-slate-400 uppercase">E-mail</th><th class="px-4 py-3 text-left text-[11px] font-bold text-slate-400 uppercase">Status</th><th class="px-4 py-3 text-right text-[11px] font-bold text-slate-400 uppercase">Ações</th></tr></thead>
+                            <tbody id="tabelaUsuariosCadastrados" class="divide-y divide-brand-border/40"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="bg-brand-card rounded-2xl shadow-sm border border-brand-border overflow-hidden">
+                    <div class="p-5 border-b border-brand-border"><h4 class="font-bold text-white text-sm">🕵️ Trilha de Auditoria</h4></div>
+                    <div class="overflow-x-auto"><table class="min-w-full divide-y divide-brand-border"><tbody id="tabelaAuditLogs" class="divide-y divide-brand-border/40"></tbody></table></div>
+                </div>
+            `;
+            try {
+                const [snapUsers, snapLogs] = await Promise.all([getDocs(collection(db, "usuarios_cadastrados")), getDocs(collection(db, "audit_logs"))]);
+                const tbody = document.getElementById('tabelaUsuariosCadastrados');
+                snapUsers.forEach((docSnap) => {
+                    const data = docSnap.data(); const status = data.status || 'ativo';
+                    const badge = status === 'ativo' ? '<span class="px-2.5 py-1 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 rounded-md border border-emerald-500/20">ATIVO</span>' : '<span class="px-2.5 py-1 text-[10px] font-semibold bg-rose-500/10 text-rose-400 rounded-md border border-rose-500/20">BLOQUEADO</span>';
+                    tbody.innerHTML += `<tr class="hover:bg-[#132238]/50 border-b border-brand-border/40"><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.nome || '-'}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.email || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs">${badge}</td><td class="px-4 md:px-6 py-3.5 text-xs text-right"><button onclick="alternarStatusUsuario('${docSnap.id}', '${status}')" class="px-2.5 py-1 ${status === 'ativo' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'} text-[11px] font-medium rounded-lg">Alterar</button></td></tr>`;
+                });
+                const tbodyLogs = document.getElementById('tabelaAuditLogs');
+                let logsArr = []; snapLogs.forEach(d => logsArr.push(d.data()));
+                logsArr.slice(-20).reverse().forEach(log => { tbodyLogs.innerHTML += `<tr class="hover:bg-[#132238]/50 border-b border-brand-border/40"><td class="px-4 md:px-6 py-3.5 text-xs font-mono text-slate-400">${log.data || '-'}</td><td class="px-4 md:px-6 py-3.5 text-xs text-brand-gold font-medium">${log.usuario || '-'}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200">${log.acao || '-'}</td></tr>`; });
+            } catch (err) {}
+        }
+        window.alternarStatusUsuario = async function(docId, statusAtual) { await updateDoc(doc(db, "usuarios_cadastrados", docId), { status: statusAtual === 'ativo' ? 'bloqueado' : 'ativo' }); carregarPainelAdmin(); }
 
+        /* PROCESSAMENTO COMPLETO DE IMPORTAÇÃO */
         window.processarPlanilha = function(event, modulo) {
             const file = event.target.files[0]; if (!file) return;
             let btnTextId = event.target.id + 'Text'; let textoOriginal = document.getElementById(btnTextId).innerText; document.getElementById(btnTextId).innerText = "Processando...";
@@ -508,13 +592,26 @@
                     if (modulo === 'cobrancas') {
                         let itensCobranca = [];
                         for (let nomeAba of workbook.SheetNames) {
-                            const json = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba]); const diaVencimento = nomeAba.includes('20') ? 20 : 5; 
+                            const json = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba]);
                             for (let linha of json) {
                                 if (!linha['CLIENTE']) continue; 
-                                let cliId = String(linha['CLIENTE']).trim(); let quantParStr = String(linha['QUANT PAR'] || '1/1'); let parcelasPagas = 1, totalParcelas = 1;
+                                
+                                let diaVencimento = 5; 
+                                let diaLinha = parseInt(linha['DIA'] || linha['VENCIMENTO'] || linha['CICLO']);
+                                if (!isNaN(diaLinha) && (diaLinha === 5 || diaLinha === 20)) {
+                                    diaVencimento = diaLinha;
+                                } else if (nomeAba.includes('20')) {
+                                    diaVencimento = 20;
+                                }
+
+                                let cliId = String(linha['CLIENTE']).trim(); 
+                                let quantParStr = String(linha['QUANT PAR'] || '1/1'); 
+                                let parcelasPagas = 1, totalParcelas = 1;
                                 if (quantParStr.includes('/')) { let partes = quantParStr.split('/'); parcelasPagas = parseInt(partes[0]) || 1; totalParcelas = parseInt(partes[1]) || 1; }
-                                let valorParcela = parseFloat(String(linha['VALOR PARCELA'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0; let valorRecebido = parseFloat(String(linha['TOTAL RECEBIDO'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+                                let valorParcela = parseFloat(String(linha['VALOR PARCELA'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0; 
+                                let valorRecebido = parseFloat(String(linha['TOTAL RECEBIDO'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
                                 let status = valorRecebido >= (parcelasPagas * valorParcela) ? 'pago' : 'pendente';
+                                
                                 itensCobranca.push({ cliente_id: cliId, marca: String(linha['MARCA'] || '-').trim(), dia_vencimento: diaVencimento, valor_total: valorParcela, valor_pago: valorRecebido, quantidade_parcelas: totalParcelas, parcelas_pagas: parcelasPagas, status_pagamento: status });
                             }
                         }
@@ -526,8 +623,6 @@
                         let itensClientes = [];
                         for (let nomeAba of workbook.SheetNames) {
                             const json = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba]); const upperAba = nomeAba.toUpperCase();
-                            
-                            // FIX MASTER DE IMPORTAÇÃO: PADRÃO AGORA É PAGANTE, EVITANDO 500+ FALSOS QUITADOS
                             let defaultStatus = 'PAGANTE';
                             if (upperAba.includes('CANCELADO')) defaultStatus = 'CANCELADO';
                             if (upperAba.includes('INADIMP')) defaultStatus = 'INADIMPLENTE';
@@ -545,9 +640,51 @@
                         carregarClientes();
                     }
 
-                    if (modulo === 'rpi') { /* Import RPI */ }
-                    if (modulo === 'gru') { /* Import GRU */ }
-                    if (modulo === 'mensal') { /* Import Mensal */ }
+                    if (modulo === 'rpi') {
+                        let itensRpi = [];
+                        for (let sheetName of workbook.SheetNames) {
+                            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {header: 1});
+                            let currentPhase = "GERAL";
+                            for (let r = 0; r < rows.length; r++) {
+                                let row = rows[r];
+                                for (let c = 0; c < row.length; c += 4) {
+                                    let valCol0 = row[c] ? String(row[c]).trim() : ""; let valCol1 = row[c+1] ? String(row[c+1]).trim() : "";
+                                    if (valCol0 && !/^\d+$/.test(valCol0) && valCol0.length > 3) { currentPhase = valCol0; }
+                                    if (valCol0 && /^\d+$/.test(valCol0) && valCol1) { itensRpi.push({ processo: valCol0, marca: valCol1, fase: currentPhase.toUpperCase() }); }
+                                }
+                            }
+                        }
+                        await executarEmLotes("rpi_marcas", itensRpi, (d) => String(d.processo || '').trim());
+                        carregarRPI();
+                    }
+
+                    if (modulo === 'gru') {
+                        let itensGru = [];
+                        for (let nomeAba of workbook.SheetNames) {
+                            const json = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba]);
+                            for (let linha of json) {
+                                let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim(); if (!cli) continue;
+                                itensGru.push({ cliente: cli, marca: String(linha['MARCA'] || linha['Marca'] || '-').trim(), vencimento: String(linha['VENCIMENTO'] || linha['Vencimento'] || '-').trim(), status_pagamento: 'pendente', anotacoes: '' });
+                            }
+                        }
+                        await executarEmLotes("gru", itensGru, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.vencimento || '').trim()}`.toUpperCase());
+                        carregarGRU();
+                    }
+
+                    if (modulo === 'mensal') {
+                        let itensMensal = [];
+                        for (let nomeAba of workbook.SheetNames) {
+                            const json = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba]);
+                            for (let linha of json) {
+                                let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim(); if (!cli) continue;
+                                let rawData = linha['DATA DE PAGAMENTO'] || linha['Data'] || '-';
+                                let formatedDate = typeof rawData === 'number' ? new Date((rawData - 25569)*86400*1000).toLocaleDateString('pt-BR') : rawData;
+                                itensMensal.push({ cliente: cli, marca: String(linha['MARCA'] || linha['Marca'] || '-').trim(), valor: parseFloat(String(linha['VALOR'] || linha['Valor'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0, data_pagamento: String(formatedDate || '-').trim(), status: String(linha['STATUS'] || linha['Status'] || 'PAGO').trim() });
+                            }
+                        }
+                        await executarEmLotes("mensal", itensMensal, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.data_pagamento || '').trim()}`.toUpperCase());
+                        carregarMensal();
+                    }
 
                     if (modulo === 'parcelas') {
                         let itensParcelas = [];
@@ -558,7 +695,6 @@
                                 itensParcelas.push({ cliente: cli, marca: String(linha['MARCA'] || linha['Marca'] || '-').trim(), parcela: String(linha['PARCELA'] || linha['Parcela'] || '1/1').trim(), valor: parseFloat(String(linha['VALOR'] || linha['Valor'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0, vencimento: String(linha['VENCIMENTO'] || linha['Vencimento'] || '-').trim(), status: String(linha['STATUS'] || linha['Status'] || 'PENDENTE').trim() });
                             }
                         }
-                        // Chave única para Parcelas: Cliente + Marca + Número da Parcela (Permite histórico completo)
                         await executarEmLotes("parcelas", itensParcelas, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.parcela || '').trim()}`.toUpperCase());
                         carregarParcelas();
                     }
@@ -572,7 +708,6 @@
 </head>
 <body class="bg-brand-dark min-h-screen flex flex-col md:flex-row font-sans text-slate-200 antialiased selection:bg-brand-gold selection:text-brand-dark">
 
-    <!-- TELA DE LOGIN OMITIDA POR BREVIDADE (Mantida idêntica à versão anterior) -->
     <div id="tela-login" class="fixed inset-0 bg-brand-dark z-50 flex items-center justify-center p-4">
         <div class="bg-brand-card rounded-3xl shadow-2xl p-8 max-w-sm w-full border border-brand-border text-center relative overflow-hidden backdrop-blur-xl">
             <h2 class="text-xl font-extrabold text-white tracking-tight mt-4">KRONOS GS</h2>
@@ -585,7 +720,6 @@
         </div>
     </div>
 
-    <!-- APLICAÇÃO PRINCIPAL -->
     <div id="app-container" class="hidden flex w-full min-h-screen">
         
         <div id="sidebar-overlay" onclick="toggleMenuMobile()" class="fixed inset-0 bg-slate-950/80 z-30 hidden md:hidden backdrop-blur-sm"></div>
@@ -643,7 +777,6 @@
             </div>
         </aside>
 
-        <!-- CONTEÚDO PRINCIPAL -->
         <main class="flex-1 w-full md:ml-60 bg-brand-dark min-h-screen flex flex-col">
 
             <header class="bg-brand-card border-b border-brand-border px-4 py-3 flex flex-wrap md:flex-nowrap items-center justify-between sticky top-0 z-30 gap-3">
@@ -661,7 +794,6 @@
 
             <div class="p-4 md:p-8 flex-1">
 
-                <!-- ABA 0: DASHBOARD GERAL -->
                 <div id="aba-dashboard" class="aba-conteudo block">
                     <div class="flex justify-between items-center mb-6">
                         <div>
@@ -737,7 +869,64 @@
                     </div>
                 </div>
 
-                <!-- ABA 2: BASE MARCAS -->
+                <div id="aba-cobrancas" class="aba-conteudo hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h2 class="text-xl font-extrabold text-white tracking-tight">Faturamento e Ciclos</h2>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border"><p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Previsto (Ciclo)</p><p id="totalPrevisto" class="text-2xl font-black text-white mt-1.5">R$ 0,00</p></div>
+                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border"><p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Arrecadado</p><p id="totalArrecadado" class="text-2xl font-black text-emerald-400 mt-1.5">R$ 0,00</p></div>
+                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border"><p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Registros Ativos</p><p id="totalClientesFat" class="text-2xl font-black text-blue-400 mt-1.5">0</p></div>
+                    </div>
+                    <div class="bg-brand-card p-5 rounded-t-2xl shadow-sm border border-brand-border border-b-0 flex flex-wrap gap-3 justify-between items-center">
+                        <div class="flex gap-2">
+                            <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-brand-gold text-brand-dark rounded-xl font-bold text-xs shadow">Ciclo Dia 5</button>
+                            <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-brand-card text-slate-300 border border-brand-border rounded-xl font-medium text-xs">Ciclo Dia 20</button>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <input type="text" id="buscaCobrancas" onkeyup="filtrarCobrancas()" placeholder="🔍 Buscar..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-36 md:w-44">
+                            <button onclick="abrirModalCobranca()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow">+ Novo</button>
+                            <button onclick="exportarParaExcel('Faturamento', cacheCobrancas)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
+                            <input type="file" id="upCobrancas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'cobrancas')" />
+                            <label for="upCobrancas" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs"><span id="upCobrancasText">Importar</span></label>
+                        </div>
+                    </div>
+                    <div class="bg-brand-card rounded-b-2xl shadow-sm border border-brand-border overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-brand-border">
+                                <thead class="bg-[#132238]">
+                                    <tr><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Cliente</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Marca</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Venc.</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Vlr Parcela</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Vlr Pago</th><th class="px-4 py-3 text-center text-[10px] font-bold text-slate-400 uppercase">Pagas</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Ações</th></tr>
+                                </thead>
+                                <tbody id="tabelaCobrancas" class="divide-y divide-brand-border/40"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="aba-parcelas" class="aba-conteudo hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-extrabold text-white tracking-tight">Planilha de Parcelas</h2>
+                    </div>
+                    <div class="bg-brand-card p-4 rounded-t-2xl border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
+                        <input type="text" id="buscaParcelas" onkeyup="filtrarParcelas()" placeholder="🔍 Buscar..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button onclick="exportarParaExcel('Planilha_Parcelas', cacheParcelas)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
+                            <input type="file" id="upParcelas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'parcelas')" />
+                            <label for="upParcelas" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs"><span id="upParcelasText">Importar</span></label>
+                        </div>
+                    </div>
+                    <div class="bg-brand-card rounded-b-2xl shadow-sm border border-brand-border overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-brand-border">
+                                <thead class="bg-[#132238]"><tr><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Cliente</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Marca</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Parcela</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Valor</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Vencimento</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Status</th></tr></thead>
+                                <tbody id="tabelaParcelas" class="divide-y divide-brand-border/40"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="aba-clientes" class="aba-conteudo hidden">
                     <div class="flex justify-between items-center mb-6">
                         <div>
@@ -776,7 +965,6 @@
                                 ⚖️ Auditoria Status
                             </button>
                             <button onclick="abrirModalCliente()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow">+ Novo</button>
-                            <button onclick="gerarRelatorioClientes()" class="px-3.5 py-2 bg-[#132238] text-white rounded-xl font-bold text-xs border border-brand-border">PDF</button>
                             <button onclick="exportarParaExcel('Base_Marcas_Financeiro', cacheClientes)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
                             <input type="file" id="upClientes" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'clientes')" />
                             <label for="upClientes" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs">
@@ -805,123 +993,105 @@
                     </div>
                 </div>
 
-                <!-- MODAL CLIENTE -->
-                <div id="modalCliente" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-                    <div class="bg-brand-card rounded-3xl shadow-2xl max-w-lg w-full p-7 border border-brand-border relative text-white">
-                        <h3 id="modalClienteTitulo" class="text-base font-bold text-white mb-5">Novo Registro</h3>
-                        <form id="formCliente" onsubmit="salvarClienteManual(event)" class="space-y-3.5">
-                            <input type="hidden" id="cliDocId">
-                            <div>
-                                <label class="block text-[10px] font-bold text-slate-400 uppercase">Cliente</label>
-                                <input type="text" id="cliCliente" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold" required>
-                            </div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                                <div>
-                                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Empresa / Marca</label>
-                                    <input type="text" id="cliEmpresa" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold" required>
-                                </div>
-                                <div>
-                                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Tel. / WhatsApp</label>
-                                    <input type="text" id="cliTelefone" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold">
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div>
-                                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Valor Pc (R$)</label>
-                                    <input type="number" step="0.01" id="cliValorPc" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold" required>
-                                </div>
-                                <div>
-                                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Status</label>
-                                    <select id="cliStatusCli" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold">
-                                        <option value="PAGANTE">PAGANTE</option>
-                                        <option value="QUITADO">QUITADO</option>
-                                        <option value="INADIMPLENTE">INADIMPLENTE</option>
-                                        <option value="CANCELADO">CANCELADO</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Anuidade</label>
-                                    <input type="text" id="cliAnuidade" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold">
-                                </div>
-                            </div>
-                            <div class="flex justify-end gap-2.5 pt-4 border-t border-brand-border">
-                                <button type="button" onclick="fecharModalCliente()" class="px-4 py-2 bg-[#132238] hover:bg-brand-border text-slate-300 text-xs font-semibold rounded-xl">Cancelar</button>
-                                <button type="submit" class="px-5 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark text-xs font-extrabold rounded-xl shadow">Salvar</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- ABAS RESTANTES (OMITIDAS NO HTML ACIMA, MAS PRESENTES NO SISTEMA) -->
-                <!-- As divs #aba-cobrancas, #aba-parcelas, #aba-rpi, #aba-gru, #aba-mensal 
-                     devem estar aqui exatamente como enviei no código da mensagem anterior,
-                     elas funcionam perfeitamente junto com essa correção. -->
-                     
-                <!-- ABA 1: COBRANÇAS -->
-                <div id="aba-cobrancas" class="aba-conteudo hidden">
+                <div id="aba-rpi" class="aba-conteudo hidden">
                     <div class="flex justify-between items-center mb-6">
-                        <div>
-                            <h2 class="text-xl font-extrabold text-white tracking-tight">Faturamento e Ciclos</h2>
-                        </div>
+                        <h2 class="text-xl font-extrabold text-white tracking-tight">Monitoramento INPI (RPI)</h2>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border"><p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Previsto (Ciclo)</p><p id="totalPrevisto" class="text-2xl font-black text-white mt-1.5">R$ 0,00</p></div>
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border"><p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Arrecadado</p><p id="totalArrecadado" class="text-2xl font-black text-emerald-400 mt-1.5">R$ 0,00</p></div>
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border"><p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Registros Ativos</p><p id="totalClientesFat" class="text-2xl font-black text-blue-400 mt-1.5">0</p></div>
-                    </div>
-                    <div class="bg-brand-card p-5 rounded-t-2xl shadow-sm border border-brand-border border-b-0 flex flex-wrap gap-3 justify-between items-center">
-                        <div class="flex gap-2">
-                            <button id="btnDia5" onclick="carregarCobrancas(5)" class="px-4 py-2 bg-brand-gold text-brand-dark rounded-xl font-bold text-xs shadow">Ciclo Dia 5</button>
-                            <button id="btnDia20" onclick="carregarCobrancas(20)" class="px-4 py-2 bg-brand-card text-slate-300 border border-brand-border rounded-xl font-medium text-xs">Ciclo Dia 20</button>
-                        </div>
+                    <div id="dashRpiContainer" class="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6"></div>
+                    <div class="bg-brand-card p-4 rounded-t-2xl border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
+                        <input type="text" id="buscaRPI" onkeyup="filtrarRPI('TODOS')" placeholder="🔍 Pesquisar aba..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
                         <div class="flex flex-wrap items-center gap-2">
-                            <input type="text" id="buscaCobrancas" onkeyup="filtrarCobrancas()" placeholder="🔍 Buscar..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-36 md:w-44">
-                            <button onclick="abrirModalCobranca()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow">+ Novo</button>
-                            <button onclick="exportarParaExcel('Faturamento', cacheCobrancas)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
-                            <input type="file" id="upCobrancas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'cobrancas')" />
-                            <label for="upCobrancas" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs"><span id="upCobrancasText">Importar</span></label>
+                            <button onclick="exportarParaExcel('Revistas_RPI', rpiCache)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
+                            <input type="file" id="upRpi" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'rpi')" />
+                            <label for="upRpi" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs"><span id="upRpiText">Importar</span></label>
                         </div>
                     </div>
                     <div class="bg-brand-card rounded-b-2xl shadow-sm border border-brand-border overflow-hidden">
                         <div class="overflow-x-auto">
                             <table class="min-w-full divide-y divide-brand-border">
-                                <thead class="bg-[#132238]">
-                                    <tr><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Cliente</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Marca</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Venc.</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Vlr Parcela</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Vlr Pago</th><th class="px-4 py-3 text-center text-[10px] font-bold text-slate-400 uppercase">Pagas</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Ações</th></tr>
-                                </thead>
-                                <tbody id="tabelaCobrancas" class="divide-y divide-brand-border/40"></tbody>
+                                <thead class="bg-[#132238]"><tr><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Processo</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Marca</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Fase</th></tr></thead>
+                                <tbody id="tabelaRPI" class="divide-y divide-brand-border/40"></tbody>
                             </table>
                         </div>
                     </div>
                 </div>
 
-                <!-- ABA 3: PLANILHA DE PARCELAS -->
-                <div id="aba-parcelas" class="aba-conteudo hidden">
+                <div id="aba-gru" class="aba-conteudo hidden">
                     <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-xl font-extrabold text-white tracking-tight">Planilha de Parcelas</h2>
+                        <h2 class="text-xl font-extrabold text-white tracking-tight">Gestão de Guias GRU</h2>
                     </div>
                     <div class="bg-brand-card p-4 rounded-t-2xl border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
-                        <input type="text" id="buscaParcelas" onkeyup="filtrarParcelas()" placeholder="🔍 Buscar..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
+                        <input type="text" id="buscaGRU" onkeyup="filtrarGRU()" placeholder="🔍 Pesquisar aba..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
                         <div class="flex flex-wrap items-center gap-2">
-                            <button onclick="exportarParaExcel('Planilha_Parcelas', cacheParcelas)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
-                            <input type="file" id="upParcelas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'parcelas')" />
-                            <label for="upParcelas" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs"><span id="upParcelasText">Importar</span></label>
+                            <button onclick="exportarParaExcel('Guias_GRU', cacheGRU)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
+                            <input type="file" id="upGru" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'gru')" />
+                            <label for="upGru" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs"><span id="upGruText">Importar</span></label>
                         </div>
                     </div>
                     <div class="bg-brand-card rounded-b-2xl shadow-sm border border-brand-border overflow-hidden">
                         <div class="overflow-x-auto">
                             <table class="min-w-full divide-y divide-brand-border">
-                                <thead class="bg-[#132238]"><tr><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Cliente</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Marca</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Parcela</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Valor</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Vencimento</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Status</th></tr></thead>
-                                <tbody id="tabelaParcelas" class="divide-y divide-brand-border/40"></tbody>
+                                <thead class="bg-[#132238]"><tr><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Cliente</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Marca</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Vencimento</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Status</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Anotações</th></tr></thead>
+                                <tbody id="tabelaGRU" class="divide-y divide-brand-border/40"></tbody>
                             </table>
                         </div>
                     </div>
+                </div>
+
+                <div id="aba-mensal" class="aba-conteudo hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-extrabold text-white tracking-tight">Base Administrativo</h2>
+                    </div>
+                    <div class="bg-brand-card p-4 rounded-t-2xl border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
+                        <input type="text" id="buscaMensal" onkeyup="filtrarMensal()" placeholder="🔍 Pesquisar aba..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button onclick="exportarParaExcel('Base_Administrativo', cacheMensal)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
+                            <input type="file" id="upMensal" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'mensal')" />
+                            <label for="upMensal" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs"><span id="upMensalText">Importar</span></label>
+                        </div>
+                    </div>
+                    <div class="bg-brand-card rounded-b-2xl shadow-sm border border-brand-border overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-brand-border">
+                                <thead class="bg-[#132238]"><tr><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Cliente</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Marca</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Data</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Valor</th><th class="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Status</th></tr></thead>
+                                <tbody id="tabelaMensal" class="divide-y divide-brand-border/40"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="aba-admin" class="aba-conteudo hidden">
+                    <div id="listaUsuariosAdmin"></div>
                 </div>
 
             </div>
         </main>
     </div>
 
-    <!-- MODAL COBRANÇA (Mantido do Original) -->
+    <!-- MODAIS DE EDIÇÃO -->
+    <div id="modalCliente" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-brand-card rounded-3xl shadow-2xl max-w-lg w-full p-7 border border-brand-border relative text-white">
+            <h3 id="modalClienteTitulo" class="text-base font-bold text-white mb-5">Novo Registro</h3>
+            <form id="formCliente" onsubmit="salvarClienteManual(event)" class="space-y-3.5">
+                <input type="hidden" id="cliDocId">
+                <div><label class="block text-[10px] font-bold text-slate-400 uppercase">Cliente</label><input type="text" id="cliCliente" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold" required></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    <div><label class="block text-[10px] font-bold text-slate-400 uppercase">Empresa / Marca</label><input type="text" id="cliEmpresa" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold" required></div>
+                    <div><label class="block text-[10px] font-bold text-slate-400 uppercase">Tel. / WhatsApp</label><input type="text" id="cliTelefone" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold"></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div><label class="block text-[10px] font-bold text-slate-400 uppercase">Valor Pc (R$)</label><input type="number" step="0.01" id="cliValorPc" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold" required></div>
+                    <div><label class="block text-[10px] font-bold text-slate-400 uppercase">Status</label><select id="cliStatusCli" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold"><option value="PAGANTE">PAGANTE</option><option value="QUITADO">QUITADO</option><option value="INADIMPLENTE">INADIMPLENTE</option><option value="CANCELADO">CANCELADO</option></select></div>
+                    <div><label class="block text-[10px] font-bold text-slate-400 uppercase">Anuidade</label><input type="text" id="cliAnuidade" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold"></div>
+                </div>
+                <div class="flex justify-end gap-2.5 pt-4 border-t border-brand-border">
+                    <button type="button" onclick="fecharModalCliente()" class="px-4 py-2 bg-[#132238] hover:bg-brand-border text-slate-300 text-xs font-semibold rounded-xl">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark text-xs font-extrabold rounded-xl shadow">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="modalCobranca" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-brand-card rounded-3xl shadow-2xl max-w-lg w-full p-7 border border-brand-border relative text-white">
             <h3 class="text-base font-bold text-white mb-5">Nova Cobrança</h3>
