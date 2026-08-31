@@ -6,7 +6,6 @@
     <title>Kronos GS - ERP Executive Suite</title>
     <link rel="icon" type="image/jpeg" href="https://i.imgur.com/NZyhksv.jpeg">
     
-    <!-- Configurações para Web App / PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#050B14">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -38,7 +37,10 @@
       window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
       window.instalarApp = async function() {
           if (deferredPrompt) { deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; deferredPrompt = null; } 
-          else { alert("Instalação:\n\n• Computador: Clique no ícone de instalação na barra de endereços.\n• Celular: Toque no menu do navegador (3 pontinhos) e selecione 'Adicionar à tela inicial'."); }
+          else { alert("Instalação:
+
+• Computador: Clique no ícone de instalação na barra de endereços.
+• Celular: Toque no menu do navegador (3 pontinhos) e selecione 'Adicionar à tela inicial'."); }
       };
     </script>
     
@@ -91,12 +93,18 @@
             try { const user = auth.currentUser; await addDoc(collection(db, "audit_logs"), { acao: acaoDescricao, usuario: user ? user.email : 'Sistema', data: new Date().toLocaleString('pt-BR') }); } catch (e) {}
         };
 
-        /* ----- INTEGRAÇÃO GEMINI AI ----- */
         window.analisarClienteComIA = async function(clienteNome, marca, status) {
-            // Token fornecido inserido
-            const API_KEY = "AQ.Ab8RN6KhVjh3qdTIwrwD5kJNuBJosQdCLmWtzh6OCPO9KVEaUQ"; 
+            const CREDENCIAL = "AQ.Ab8RN6KhVjh3qdTIwrwD5kJNuBJosQdCLmWtzh6OCPO9KVEaUQ"; 
             
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+            let url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+            let headers = { "Content-Type": "application/json" };
+            
+            if (CREDENCIAL.startsWith("AIza")) {
+                url += `?key=${CREDENCIAL}`;
+            } else {
+                headers["Authorization"] = `Bearer ${CREDENCIAL}`;
+            }
+
             const prompt = `Aja como um analista executivo financeiro sênior de um escritório de marcas e patentes. 
             Faça uma análise de risco rápida e objetiva deste cliente:
             - Cliente: ${clienteNome}
@@ -106,7 +114,7 @@
             Responda em 3 tópicos curtos:
             1. Perfil de Risco (Baixo, Médio ou Alto).
             2. Recomendações para o setor administrativo.
-            3. Script curto de abordagem sugerido para o WhatsApp (se necessário cobrar ou reter).`;
+            3. Script curto de abordagem sugerido para o WhatsApp.`;
 
             let btnTxt = event.target.innerText;
             event.target.innerText = "⏳...";
@@ -114,12 +122,13 @@
             try {
                 const resposta = await fetch(url, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: headers,
                     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
                 
                 if (!resposta.ok) {
-                    throw new Error(`Erro na requisição: ${resposta.status}`);
+                    const errText = await resposta.text();
+                    throw new Error(`Erro na API (${resposta.status}): ${errText}`);
                 }
 
                 const dados = await resposta.json();
@@ -127,13 +136,12 @@
                 alert(`✨ ANÁLISE DA IA - ${clienteNome}\n\n${textoIA}`);
             } catch (erro) {
                 console.error("Erro no Gemini:", erro);
-                alert("Falha de comunicação com a IA. Verifique se o token tem permissões válidas para a API do Gemini.");
+                alert("Falha de comunicação com a IA: " + erro.message);
             } finally {
                 event.target.innerText = btnTxt;
             }
         };
 
-        /* ----- SINCRONIZAÇÃO INTELIGENTE COM A REGRA DE STATUS ----- */
         window.sincronizarClientesGlobais = async function(listaParaSincronizar) {
             if (!listaParaSincronizar || listaParaSincronizar.length === 0) return;
             try {
@@ -177,7 +185,6 @@
             } catch (error) { console.error(error); }
         };
 
-        /* ----- AUDITORIA ABSOLUTA DE STATUS ----- */
         window.auditoriaInadimplencia = async function() {
             let dataFechamento = prompt("⚖️ AUDITORIA DE STATUS (100% EXATA)\n\nDigite o DIA de fechamento (ex: 5 ou 20) para avaliar as parcelas pendentes.\n(Se deixar em branco, o sistema aplicará a regra rígida de 1 ou 2 parcelas pagas = INADIMPLENTE para todos).");
             if(dataFechamento === null) return;
@@ -226,7 +233,7 @@
                         else if (fat.pagas >= 3 && fat.pagas < fat.totais) novoStatus = 'PAGANTE';
                         else if (fat.pagas === 0) novoStatus = 'PAGANTE';
                     } else {
-                        if (novoStatus === 'QUITADO') novoStatus = 'PAGANTE'; // Corrige os falsos Quitados
+                        if (novoStatus === 'QUITADO') novoStatus = 'PAGANTE'; 
                     }
 
                     if(novoStatus !== cli.status_cliente) {
@@ -240,7 +247,7 @@
                 
                 if(countUpdates > 0) {
                     await registrarLog(`Auditoria de Status: ${countUpdates} clientes corrigidos.`);
-                    alert(`✅ Auditoria Concluída com Sucesso!\n\n${countUpdates} clientes tiveram seus status corrigidos (falsos Quitados revertidos e regra de Inadimplentes aplicada).`);
+                    alert(`✅ Auditoria Concluída com Sucesso!\n\n${countUpdates} clientes tiveram seus status corrigidos.`);
                     carregarClientes();
                     carregarDashboardGeral();
                 } else { alert("✅ Sua base já está 100% perfeita. Nenhuma correção necessária."); }
@@ -365,8 +372,6 @@
         window.irParaResultado = function(abaId) { document.getElementById('inputBuscaGlobal').value = ''; document.getElementById('dropdownBuscaGlobal').classList.add('hidden'); abrirAba(abaId); };
         document.addEventListener('click', function(e) { const searchC = document.getElementById('inputBuscaGlobal')?.parentElement; if (searchC && !searchC.contains(e.target)) document.getElementById('dropdownBuscaGlobal')?.classList.add('hidden'); });
 
-        /* ================= CARREGAMENTOS E DASHBOARD ================= */
-        
         window.carregarDashboardGeral = async function() {
             try {
                 const [snapCob, snapCli, snapRpi] = await Promise.all([ getDocs(collection(db, "cobrancas")), getDocs(collection(db, "clientes")), getDocs(collection(db, "rpi_marcas")) ]);
@@ -488,7 +493,31 @@
         window.excluirCliente = async function(docId) { if (confirm("Excluir?")) { await deleteDoc(doc(db, "clientes", docId)); carregarClientes(); } }
         window.filtrarClientes = function() { const termo = document.getElementById('buscaClientes').value.toLowerCase(); renderizarTabelaClientes(cacheClientes.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.empresa || item.marca || '').toLowerCase().includes(termo) || String(item.status_cliente || '').toLowerCase().includes(termo))); }
 
-        /* MÓDULOS DE CARREGAMENTO */
+        window.filtrarCobrancas = function() {
+            const termo = document.getElementById('buscaCobrancas').value.toLowerCase();
+            const filtrados = cacheCobrancas.filter(item => String(item.cliente_id || '').toLowerCase().includes(termo) || String(item.marca || '').toLowerCase().includes(termo));
+            const tabela = document.getElementById('tabelaCobrancas'); tabela.innerHTML = '';
+            filtrados.forEach(data => { const badge = data.status_pagamento === 'pago' ? '<span class="px-2.5 py-1 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 rounded-md border border-emerald-500/20">PAGO</span>' : '<span class="px-2.5 py-1 text-[10px] font-semibold bg-amber-500/10 text-amber-400 rounded-md border border-amber-500/20">PENDENTE</span>'; tabela.innerHTML += `<tr class="border-b border-brand-border/40 hover:bg-[#132238]/50"><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200">${String(data.cliente_id || '')}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.marca || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">Dia ${data.dia_vencimento}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-semibold">R$ ${Number(data.valor_total || 0).toFixed(2)}</td><td class="px-4 md:px-6 py-3.5 text-xs text-emerald-400 font-semibold">R$ ${Number(data.valor_pago || 0).toFixed(2)}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-300 text-center">${data.parcelas_pagas || 0} / ${data.quantidade_parcelas || 1}</td><td class="px-4 md:px-6 py-3.5 text-xs flex gap-2">${badge}<button onclick="editarParcelas('${data.id}', ${data.parcelas_pagas || 0}, ${data.quantidade_parcelas || 1}, ${data.valor_total || 0})" class="px-2.5 py-1 bg-[#132238] text-slate-300 text-[11px] rounded-lg border border-brand-border">Atualizar</button><button onclick="excluirRegistroCobranca('${data.id}')" class="text-rose-400 text-xs font-bold">✕</button></td></tr>`; });
+        };
+        window.filtrarParcelas = function() {
+            const termo = document.getElementById('buscaParcelas').value.toLowerCase();
+            const filtrados = cacheParcelas.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.marca || '').toLowerCase().includes(termo));
+            const tabela = document.getElementById('tabelaParcelas'); tabela.innerHTML = '';
+            filtrados.forEach(data => { tabela.innerHTML += `<tr class="border-b border-brand-border/40 hover:bg-[#132238]/50"><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200">${data.cliente || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.marca || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-300">${data.parcela || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-brand-gold font-semibold">R$ ${Number(data.valor || 0).toFixed(2)}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.vencimento || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs font-semibold text-emerald-400">${data.status || 'PAGO'}</td></tr>`; });
+        };
+        window.filtrarGRU = function() {
+            const termo = document.getElementById('buscaGRU').value.toLowerCase();
+            const filtrados = cacheGRU.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.marca || '').toLowerCase().includes(termo));
+            const t = document.getElementById('tabelaGRU'); t.innerHTML='';
+            filtrados.forEach(d => { const b = d.status_pagamento === 'pago' ? '<span class="px-2.5 py-1 text-[10px] bg-emerald-500/10 text-emerald-400 rounded-md border border-emerald-500/20">PAGO</span>' : '<span class="px-2.5 py-1 text-[10px] bg-amber-500/10 text-amber-400 rounded-md border border-amber-500/20">PENDENTE</span>'; t.innerHTML += `<tr class="border-b border-brand-border/40 hover:bg-[#132238]/50"><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200">${d.cliente || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${d.marca || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${d.vencimento || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs flex items-center gap-2">${b} <button onclick="alternarStatusGRU('${d.id}', '${d.status_pagamento || 'pendente'}')" class="px-2.5 py-1 bg-[#132238] text-slate-300 text-[11px] rounded-lg border border-brand-border">Alterar</button></td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-300">${d.anotacoes || ''}</td></tr>`; });
+        };
+        window.filtrarMensal = function() {
+            const termo = document.getElementById('buscaMensal').value.toLowerCase();
+            const filtrados = cacheMensal.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.marca || '').toLowerCase().includes(termo));
+            const t = document.getElementById('tabelaMensal'); t.innerHTML='';
+            filtrados.forEach(d => { t.innerHTML += `<tr class="border-b border-brand-border/40 hover:bg-[#132238]/50"><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200">${d.cliente || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${d.marca || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${d.data_pagamento || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-semibold">R$ ${Number(d.valor || 0).toFixed(2)}</td><td class="px-4 md:px-6 py-3.5 text-xs font-semibold text-emerald-400">${d.status || 'PAGO'}</td></tr>`; });
+        };
+
         window.carregarCobrancas = async function(dia) {
             cicloAtual = dia; document.getElementById('btnDia5').className = dia === 5 ? 'px-4 py-2 bg-brand-gold text-brand-dark rounded-xl font-bold shadow-md text-xs' : 'px-4 py-2 bg-brand-card text-slate-300 border border-brand-border rounded-xl hover:bg-brand-border text-xs'; document.getElementById('btnDia20').className = dia === 20 ? 'px-4 py-2 bg-brand-gold text-brand-dark rounded-xl font-bold shadow-md text-xs' : 'px-4 py-2 bg-brand-card text-slate-300 border border-brand-border rounded-xl hover:bg-brand-border text-xs';
             const tabela = document.getElementById('tabelaCobrancas'); tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Consultando...</td></tr>`;
@@ -573,7 +602,6 @@
         }
         window.alternarStatusUsuario = async function(docId, statusAtual) { await updateDoc(doc(db, "usuarios_cadastrados", docId), { status: statusAtual === 'ativo' ? 'bloqueado' : 'ativo' }); carregarPainelAdmin(); }
 
-        /* PROCESSAMENTO COMPLETO DE IMPORTAÇÃO */
         window.processarPlanilha = function(event, modulo) {
             const file = event.target.files[0]; if (!file) return;
             let btnTextId = event.target.id + 'Text'; let textoOriginal = document.getElementById(btnTextId).innerText; document.getElementById(btnTextId).innerText = "Processando...";
@@ -595,7 +623,6 @@
                             const json = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba]);
                             for (let linha of json) {
                                 if (!linha['CLIENTE']) continue; 
-                                
                                 let diaVencimento = 5; 
                                 let diaLinha = parseInt(linha['DIA'] || linha['VENCIMENTO'] || linha['CICLO']);
                                 if (!isNaN(diaLinha) && (diaLinha === 5 || diaLinha === 20)) {
@@ -709,11 +736,17 @@
 <body class="bg-brand-dark min-h-screen flex flex-col md:flex-row font-sans text-slate-200 antialiased selection:bg-brand-gold selection:text-brand-dark">
 
     <div id="tela-login" class="fixed inset-0 bg-brand-dark z-50 flex items-center justify-center p-4">
-        <div class="bg-brand-card rounded-3xl shadow-2xl p-8 max-w-sm w-full border border-brand-border text-center relative overflow-hidden backdrop-blur-xl">
-            <h2 class="text-xl font-extrabold text-white tracking-tight mt-4">KRONOS GS</h2>
-            <form id="form-entrar" class="mt-6 space-y-3.5 text-left block" onsubmit="event.preventDefault(); fazerLogin();">
-                <div><label class="block text-[10px] font-bold text-slate-400 uppercase">E-mail</label><input type="email" id="loginEmail" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs" required></div>
-                <div><label class="block text-[10px] font-bold text-slate-400 uppercase">Senha</label><input type="password" id="loginSenha" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs" required></div>
+        <div class="bg-brand-card rounded-3xl shadow-2xl p-8 max-w-sm w-full border border-brand-border text-center relative backdrop-blur-xl">
+            <h2 class="text-xl font-extrabold text-white tracking-tight mt-2">KRONOS GS</h2>
+            <form id="form-entrar" class="mt-6 space-y-4 text-left block" onsubmit="event.preventDefault(); fazerLogin();">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase">E-mail</label>
+                    <input type="email" id="loginEmail" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold" required>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Senha</label>
+                    <input type="password" id="loginSenha" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold" required>
+                </div>
                 <button type="submit" class="w-full py-3 bg-brand-gold hover:bg-brand-goldHover text-brand-dark font-extrabold rounded-xl shadow-lg transition-all tracking-wider text-xs mt-2">ACESSAR SISTEMA</button>
             </form>
             <p id="loginErro" class="text-center text-[11px] font-medium text-rose-400 mt-3"></p>
@@ -1068,7 +1101,6 @@
         </main>
     </div>
 
-    <!-- MODAIS DE EDIÇÃO -->
     <div id="modalCliente" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-brand-card rounded-3xl shadow-2xl max-w-lg w-full p-7 border border-brand-border relative text-white">
             <h3 id="modalClienteTitulo" class="text-base font-bold text-white mb-5">Novo Registro</h3>
