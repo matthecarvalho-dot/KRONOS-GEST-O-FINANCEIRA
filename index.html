@@ -81,7 +81,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, getDocs, query, where, addDoc, doc, updateDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, setPersistence, inMemoryPersistence, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, setPersistence, inMemoryPersistence, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyD6Mv3DiNGWCoC4Rd0iOt6L22qxnS-XAhY",
@@ -163,7 +163,6 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
 
             try {
-                // Montando o contexto completo do ERP para o Gemini
                 const contextoERP = `
                     Você é o Kronos AI, assistente executivo inteligente do ERP Kronos GS, especializado em gestão financeira, marcas, patentes e processos no INPI para escritórios jurídicos.
                     Aqui estão os dados consolidados atuais do sistema:
@@ -177,9 +176,18 @@
                     Pergunta do Usuário: ${promptText}
                 `;
 
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+                let endpointUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
+                let headers = { 'Content-Type': 'application/json' };
+
+                if (apiKey.startsWith('AQ.')) {
+                    headers['Authorization'] = `Bearer ${apiKey}`;
+                } else {
+                    endpointUrl += `?key=${apiKey}`;
+                }
+
+                const response = await fetch(endpointUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: headers,
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: contextoERP }] }]
                     })
@@ -198,7 +206,7 @@
                         </div>
                     `;
                 } else {
-                    throw new Error("Resposta inválida da API.");
+                    throw new Error(data.error?.message || "Resposta inválida da API.");
                 }
             } catch (err) {
                 console.error(err);
@@ -206,7 +214,7 @@
                 chatContainer.innerHTML += `
                     <div class="flex justify-start mb-3">
                         <div class="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-4 py-2.5 rounded-2xl text-xs">
-                            Erro ao comunicar com a API do Gemini. Verifique se sua chave está correta.
+                            Erro ao comunicar com a API do Gemini: ${err.message}
                         </div>
                     </div>
                 `;
@@ -289,6 +297,37 @@
                 }
             } catch (error) {
                 console.error("Erro na sincronização automática de clientes:", error);
+            }
+        };
+
+        window.zerarBancoCompletoAdmin = async function() {
+            if (!confirm("⚠️ ATENÇÃO: Deseja realmente apagar TODOS os dados de clientes, faturamento, RPI, GRU, mensal e parcelas do sistema? Esta ação é irreversível!")) return;
+            if (!confirm("Tem certeza absoluta? Todos os dados operacionais serão apagados.")) return;
+            
+            try {
+                const colecoes = ['clientes', 'cobrancas', 'rpi_marcas', 'gru', 'mensal', 'parcelas'];
+                for (let nomeCol of colecoes) {
+                    const snap = await getDocs(collection(db, nomeCol));
+                    if (snap.empty) continue;
+                    let batch = writeBatch(db);
+                    let count = 0;
+                    for (let docSnap of snap.docs) {
+                        batch.delete(docSnap.ref);
+                        count++;
+                        if (count >= 400) {
+                            await batch.commit();
+                            batch = writeBatch(db);
+                            count = 0;
+                        }
+                    }
+                    if (count > 0) await batch.commit();
+                }
+                await registrarLog("Administrador zerou todas as coleções de dados do sistema.");
+                alert("Banco de dados limpo com sucesso! A página será recarregada.");
+                window.location.reload();
+            } catch (err) {
+                console.error(err);
+                alert("Erro ao limpar o banco de dados: " + err.message);
             }
         };
 
@@ -376,6 +415,41 @@
                 await registrarLog("Login efetuado no sistema");
             } catch (error) { erroMsg.innerText = "Erro: E-mail ou senha incorretos."; }
         }
+
+        window.fazerLoginComGoogle = async function() {
+            const erroMsg = document.getElementById('loginErro');
+            erroMsg.innerText = "Conectando com o Google...";
+            try {
+                const provider = new GoogleAuthProvider();
+                const result = await signInWithPopup(auth, provider);
+                const user = result.user;
+                const email = (user.email || "").toLowerCase().trim();
+
+                if (email !== EMAIL_ADMIN) {
+                    const q = query(collection(db, "usuarios_cadastrados"), where("email", "==", email));
+                    const snap = await getDocs(q);
+                    if (snap.empty) {
+                        await addDoc(collection(db, "usuarios_cadastrados"), {
+                            email: email,
+                            nome: user.displayName || email.split('@')[0],
+                            status: 'ativo',
+                            criado_em: new Date().toLocaleDateString('pt-BR')
+                        });
+                    } else {
+                        const dadosUsuario = snap.docs[0].data();
+                        if (dadosUsuario.status === 'bloqueado') {
+                            alert("Seu acesso foi revogado pelo administrador.");
+                            await signOut(auth);
+                            return;
+                        }
+                    }
+                }
+                await registrarLog("Login efetuado com conta Google");
+            } catch (error) {
+                console.error(error);
+                erroMsg.innerText = "Erro ao autenticar com o Google.";
+            }
+        };
 
         window.fazerCadastro = async function() {
             const email = document.getElementById('cadEmail').value;
@@ -1149,6 +1223,15 @@
                     <h3 class="text-base font-bold text-white">Painel de Controle do Administrador</h3>
                     <p class="text-slate-400 mt-1 text-xs">Gerencie acessos, bloqueios, permissões e consulte a trilha de auditoria do sistema.</p>
                 </div>
+
+                <div class="bg-rose-500/10 border border-rose-500/20 p-6 rounded-2xl shadow-sm mb-6">
+                    <h3 class="text-base font-bold text-rose-400">⚠️ Zona de Perigo - Redefinição do Sistema</h3>
+                    <p class="text-slate-300 mt-1 text-xs">Apague todos os dados operacionais (clientes, faturamento, RPI, GRU, mensal e parcelas) para reiniciar as importações do zero com segurança.</p>
+                    <button onclick="zerarBancoCompletoAdmin()" class="mt-4 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow flex items-center gap-2">
+                        <span>🗑️</span> Zerar Todo o Banco de Dados do Sistema
+                    </button>
+                </div>
+
                 <div class="bg-brand-card rounded-2xl shadow-sm border border-brand-border overflow-hidden mb-8">
                     <div class="p-5 border-b border-brand-border"><h4 class="font-bold text-white text-sm">Controle de Acessos</h4></div>
                     <div class="overflow-x-auto">
@@ -1479,6 +1562,17 @@
                 <button type="submit" class="w-full py-3 bg-brand-gold hover:bg-brand-goldHover text-brand-dark font-extrabold rounded-xl shadow-lg transition-all tracking-wider text-xs mt-2">
                     ACESSAR SISTEMA
                 </button>
+
+                <div class="relative flex py-1 items-center">
+                    <div class="flex-grow border-t border-brand-border"></div>
+                    <span class="flex-shrink mx-3 text-[10px] text-slate-500 uppercase tracking-wider">ou</span>
+                    <div class="flex-grow border-t border-brand-border"></div>
+                </div>
+
+                <button type="button" onclick="fazerLoginComGoogle()" class="w-full py-2.5 bg-brand-card hover:bg-brand-border text-white font-semibold rounded-xl border border-brand-border transition-all flex items-center justify-center gap-2 text-xs shadow">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.9C6.2 7.1 8.9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/><path fill="#FBBC05" d="M5.3 14.7c-.2-.7-.4-1.5-.4-2.7s.2-2 .4-2.7L1.6 6.4C.6 8.4 0 10.6 0 13s.6 4.6 1.6 6.6l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.1-6.7-5.3L1.6 15.9C3.5 19.7 7.4 22.3 12 23z"/></svg>
+                    Entrar com Conta Google
+                </button>
                 
                 <div class="flex justify-between items-center text-[11px] pt-2.5 border-t border-brand-border">
                     <button type="button" onclick="mostrarPainelLogin('cadastro')" class="text-blue-400 hover:text-blue-300 font-medium">Criar Conta</button>
@@ -1706,7 +1800,7 @@
                     </div>
                 </div>
 
-                <!-- ABA KRONOS AI (NOVO) -->
+                <!-- ABA KRONOS AI -->
                 <div id="aba-ai" class="aba-conteudo hidden">
                     <div class="flex justify-between items-center mb-6">
                         <div>
@@ -1719,10 +1813,10 @@
                     <div class="bg-brand-card p-5 rounded-2xl border border-brand-border mb-6 flex flex-wrap md:flex-nowrap items-center justify-between gap-4">
                         <div>
                             <h3 class="font-bold text-white text-xs uppercase tracking-wider">Configuração da Chave Gemini API</h3>
-                            <p class="text-[11px] text-slate-400 mt-0.5">Insira sua chave da API do Google AI Studio para ativar as análises inteligentes.</p>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Insira sua chave ou token da API do Google AI Studio para ativar as análises inteligentes.</p>
                         </div>
                         <div class="flex items-center gap-2.5 w-full md:w-auto">
-                            <input type="password" id="inputGeminiApiKey" placeholder="Cole sua chave API aqui (AIzaSy...)" class="px-3.5 py-2 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold w-full md:w-72">
+                            <input type="password" id="inputGeminiApiKey" placeholder="Cole sua chave aqui (AQ... / AIza...)" class="px-3.5 py-2 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold w-full md:w-72">
                             <button onclick="salvarApiKeyGemini()" class="px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold text-xs shrink-0 shadow">Salvar Chave</button>
                         </div>
                     </div>
