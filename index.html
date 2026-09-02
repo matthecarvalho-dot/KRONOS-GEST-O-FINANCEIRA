@@ -101,7 +101,6 @@
 
         const EMAIL_ADMIN = "matthecarvalho@gmail.com";
         let cicloAtual = 5;
-        let chartStatusInstance = null;
         let chartFasesInstance = null;
 
         let cacheCobrancas = [];
@@ -223,7 +222,7 @@
         };
 
         window.gerarAnaliseExecutivaAutomatica = function() {
-            document.getElementById('aiPromptInput').value = "Faça um resumo executivo completo da saúde financeira do escritório, destacando inadimplências, volume de processos INPI críticos (como oposições ou indeferimentos) e recomendações estratégicas.";
+            document.getElementById('aiPromptInput').value = "Faça um resumo executivo completo da saúde financeira do escritório, destacando inadimplências, volume de processos INPI críticos e recomendações estratégicas.";
             enviarPerguntaAI();
         };
 
@@ -255,7 +254,6 @@
                             marca: m,
                             telefone: item.telefone || '',
                             valor_pc: item.valor_pc || item.valor || item.valor_total || 0,
-                            status_cliente: 'QUITADO',
                             anuidade: ''
                         });
                     }
@@ -290,13 +288,13 @@
                 
                 if (count > 0) {
                     await batchCli.commit();
-                    await registrarLog(`${count} clientes sincronizados e adicionados automaticamente na Base Marcas.`);
+                    await registrarLog(`${count} clientes sincronizados automaticamente na Base Marcas.`);
                     const q = await getDocs(collection(db, "clientes"));
                     cacheClientes = [];
                     q.forEach(d => cacheClientes.push({ id: d.id, ...d.data() }));
                 }
             } catch (error) {
-                console.error("Erro na sincronização automática de clientes:", error);
+                console.error("Erro na sincronização:", error);
             }
         };
 
@@ -579,7 +577,7 @@
                 });
 
                 cacheClientes = [];
-                let totalCli = 0, pagantes = 0, quitados = 0, inadimplentes = 0, cancelados = 0, valorTotalPc = 0;
+                let totalCli = 0, valorTotalPc = 0;
                 let ultimosClientes = [];
                 
                 snapCli.forEach(d => {
@@ -587,15 +585,7 @@
                     cacheClientes.push({ id: d.id, ...dat });
                     totalCli++;
                     valorTotalPc += Number(dat.valor_pc || 0);
-                    
-                    let st = String(dat.status_cliente || 'QUITADO').toUpperCase().trim();
-                    if (st.includes('PAGANTE')) pagantes++;
-                    else if (st.includes('QUITADO')) quitados++;
-                    else if (st.includes('INADIMPLENTE') || st.includes('NEGATIVADO')) inadimplentes++;
-                    else if (st.includes('CANCELADO')) cancelados++;
-                    else quitados++;
-
-                    ultimosClientes.push({ cliente: dat.cliente, marca: dat.empresa || dat.marca, status: dat.status_cliente || 'QUITADO', valor: dat.valor_pc || 0, telefone: dat.telefone || '' });
+                    ultimosClientes.push({ cliente: dat.cliente, marca: dat.empresa || dat.marca, valor: dat.valor_pc || 0, telefone: dat.telefone || '' });
                 });
 
                 rpiCache = [];
@@ -622,10 +612,6 @@
                 snapParc.forEach(d => cacheParcelas.push({ id: d.id, ...d.data() }));
 
                 document.getElementById('dashCardTotalClientes').innerText = totalCli;
-                document.getElementById('dashCardPagantes').innerText = pagantes;
-                document.getElementById('dashCardQuitados').innerText = quitados;
-                document.getElementById('dashCardInadimplentes').innerText = inadimplentes;
-                document.getElementById('dashCardCancelados').innerText = cancelados;
                 document.getElementById('dashCardValorTotal').innerText = `R$ ${valorTotalPc.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
                 document.getElementById('dashCardArrecadado').innerText = `R$ ${totalPago.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
                 document.getElementById('dashCardRpi').innerText = snapRpi.size;
@@ -633,39 +619,13 @@
                 const tabelaUltimos = document.getElementById('tabelaUltimosRegistros');
                 tabelaUltimos.innerHTML = '';
                 ultimosClientes.slice(-10).reverse().forEach(item => {
-                    let corSt = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-                    let stU = String(item.status).toUpperCase();
-                    if(stU.includes('PAGANTE')) corSt = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-                    if(stU.includes('INADIMPLENTE') || stU.includes('NEGATIVADO')) corSt = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-                    if(stU.includes('CANCELADO')) corSt = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
-
                     tabelaUltimos.innerHTML += `
                         <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
                             <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${item.cliente || '-'}</td>
                             <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${item.marca || '-'}</td>
-                            <td class="px-4 md:px-6 py-3.5 text-xs"><span class="px-2.5 py-1 text-[10px] font-semibold rounded-md border ${corSt}">${item.status}</span></td>
                             <td class="px-4 md:px-6 py-3.5 text-xs text-brand-gold font-semibold">R$ ${Number(item.valor || 0).toFixed(2)}</td>
                         </tr>
                     `;
-                });
-
-                if (chartStatusInstance) chartStatusInstance.destroy();
-                const ctxStatus = document.getElementById('chartStatusClientes').getContext('2d');
-                chartStatusInstance = new Chart(ctxStatus, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Pagantes', 'Quitados', 'Inadimplentes', 'Cancelados'],
-                        datasets: [{
-                            data: [pagantes, quitados, inadimplentes, cancelados],
-                            backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444'],
-                            borderWidth: 0
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { position: 'bottom', labels: { color: '#94A3B8', font: { size: 10 } } } }
-                    }
                 });
 
                 if (chartFasesInstance) chartFasesInstance.destroy();
@@ -714,7 +674,7 @@
             if (resClientes.length > 0) {
                 resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Base Marcas (${resClientes.length})</div>`;
                 resClientes.forEach(c => {
-                    resultadosHTML += `<button onclick="irParaResultado('clientes')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group"><div><p class="text-xs font-semibold text-white group-hover:text-brand-gold">${c.cliente}</p><p class="text-[10px] text-slate-400">Marca: ${c.empresa || c.marca || '-'} | Status: ${c.status_cliente}</p></div><span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span></button>`;
+                    resultadosHTML += `<button onclick="irParaResultado('clientes')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group"><div><p class="text-xs font-semibold text-white group-hover:text-brand-gold">${c.cliente}</p><p class="text-[10px] text-slate-400">Marca: ${c.empresa || c.marca || '-'}</p></div><span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span></button>`;
                 });
             }
 
@@ -723,14 +683,6 @@
                 resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Processos INPI (${resRPI.length})</div>`;
                 resRPI.forEach(r => {
                     resultadosHTML += `<button onclick="irParaResultado('rpi')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group"><div><p class="text-xs font-semibold text-blue-400">${r.processo}</p><p class="text-[10px] text-slate-400">Marca: ${r.marca || '-'} | Fase: ${r.fase}</p></div><span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span></button>`;
-                });
-            }
-
-            const resCob = cacheCobrancas.filter(c => String(c.cliente_id || '').toLowerCase().includes(termo) || String(c.marca || '').toLowerCase().includes(termo)).slice(0, 5);
-            if (resCob.length > 0) {
-                resultadosHTML += `<div class="text-[9px] font-bold text-brand-gold uppercase tracking-widest px-3 pt-3 pb-1">Faturamento (${resCob.length})</div>`;
-                resCob.forEach(c => {
-                    resultadosHTML += `<button onclick="irParaResultado('cobrancas')" class="w-full text-left px-3 py-2.5 hover:bg-[#132238] transition-colors border-b border-brand-border/30 last:border-0 flex justify-between items-center group"><div><p class="text-xs font-semibold text-emerald-400">R$ ${Number(c.valor_total || 0).toFixed(2)} - ${c.cliente_id}</p><p class="text-[10px] text-slate-400">Marca: ${c.marca || '-'} | Vencimento: Dia ${c.dia_vencimento}</p></div><span class="text-slate-500 opacity-0 group-hover:opacity-100 text-xs">Acessar &rarr;</span></button>`;
                 });
             }
 
@@ -889,15 +841,15 @@
 
         window.carregarClientes = async function() {
             const tabela = document.getElementById('tabelaClientes');
-            tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando base de marcas...</td></tr>`;
+            tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando base de marcas...</td></tr>`;
             try {
                 const querySnapshot = await getDocs(collection(db, "clientes"));
                 cacheClientes = [];
-                let totalCli = 0, pagantes = 0, quitados = 0, inadimplentes = 0, cancelados = 0;
+                let totalCli = 0;
 
                 if (querySnapshot.empty) {
-                    tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum cliente. Importe a planilha correspondente.</td></tr>`;
-                    atualizarDashboardClientes(0, 0, 0, 0, 0);
+                    tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum cliente. Importe a planilha correspondente.</td></tr>`;
+                    document.getElementById('dashTotalCli').innerText = 0;
                     return;
                 }
 
@@ -905,34 +857,19 @@
                     totalCli++;
                     const data = docSnap.data();
                     cacheClientes.push({ id: docSnap.id, ...data });
-                    let st = String(data.status_cliente || 'QUITADO').toUpperCase().trim();
-                    if (st.includes('PAGANTE')) pagantes++;
-                    else if (st.includes('QUITADO')) quitados++;
-                    else if (st.includes('INADIMPLENTE') || st.includes('NEGATIVADO')) inadimplentes++;
-                    else if (st.includes('CANCELADO')) cancelados++;
-                    else quitados++;
                 });
 
                 renderizarTabelaClientes(cacheClientes);
-                atualizarDashboardClientes(totalCli, pagantes, quitados, inadimplentes, cancelados);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-rose-400 text-xs">Erro ao carregar.</td></tr>`; }
+                document.getElementById('dashTotalCli').innerText = totalCli;
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-rose-400 text-xs">Erro ao carregar.</td></tr>`; }
         }
 
         window.renderizarTabelaClientes = function(dados) {
             const tabela = document.getElementById('tabelaClientes');
             tabela.innerHTML = '';
-            if (dados.length === 0) { tabela.innerHTML = `<tr><td colspan="7" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro.</td></tr>`; return; }
+            if (dados.length === 0) { tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro.</td></tr>`; return; }
             let html = '';
             dados.slice(0, 500).forEach(data => {
-                let st = String(data.status_cliente || 'QUITADO').toUpperCase().trim();
-                let corStatus = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-                
-                if (st.includes('PAGANTE')) corStatus = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-                else if (st.includes('INADIMPLENTE') || st.includes('NEGATIVADO')) corStatus = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-                else if (st.includes('CANCELADO')) corStatus = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
-
-                let badgeStatus = `<span class="px-2.5 py-1 text-[10px] font-semibold ${corStatus} rounded-md border">${data.status_cliente || 'QUITADO'}</span>`;
-
                 html += `
                     <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
                         <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td>
@@ -942,11 +879,10 @@
                             ${data.telefone ? `<button onclick="enviarWhatsApp('${data.telefone}', \`${data.cliente || ''}\`, \`${data.empresa || data.marca || ''}\`)" title="Enviar WhatsApp" class="text-emerald-400 hover:text-emerald-300 font-bold text-xs bg-emerald-500/10 p-1 rounded">💬</button>` : ''}
                         </td>
                         <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-semibold">R$ ${Number(data.valor_pc || 0).toFixed(2)}</td>
-                        <td class="px-4 md:px-6 py-3.5 text-xs">${badgeStatus}</td>
                         <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.anuidade || '-'}</td>
                         <td class="px-4 md:px-6 py-3.5 text-xs text-right space-x-2">
-                            <button onclick="abrirModalEditarCliente('${data.id}', \`${data.cliente || ''}\`, \`${data.empresa || data.marca || ''}\`, \`${data.telefone || ''}\`, ${data.valor_pc || 0}, \`${data.status_cliente || ''}\`, \`${data.anuidade || ''}\`)" class="px-2.5 py-1 bg-[#132238] hover:bg-brand-gold hover:text-brand-dark text-slate-300 text-[11px] font-medium rounded-lg border border-brand-border transition-all">Editar</button>
-                            <button onclick="excluirCliente('${data.id}')" class="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-[11px] font-medium rounded-lg transition-all border border-rose-500/20">Excluir</button>
+                            <button onclick="abrirModalEditarCliente('${data.id}', \`${data.cliente || ''}\`, \`${data.empresa || data.marca || ''}\`, \`${data.telefone || ''}\`, ${data.valor_pc || 0}, \`${data.anuidade || ''}\`)" class="px-2.5 py-1 bg-[#132238] hover:bg-brand-gold hover:text-brand-dark text-slate-300 text-[11px] font-medium rounded-lg border border-brand-border transition-all">Editar</button>
+                            <button onclick="excluirCliente('${data.id}')" class="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-[11px] font-medium rounded-lg transition-all border border-rose-500/20">Excluir</button>
                         </td>
                     </tr>
                 `;
@@ -961,13 +897,12 @@
             document.getElementById('modalCliente').classList.remove('hidden');
         }
 
-        window.abrirModalEditarCliente = function(id, cliente, empresa, telefone, valor_pc, status_cliente, anuidade) {
+        window.abrirModalEditarCliente = function(id, cliente, empresa, telefone, valor_pc, anuidade) {
             document.getElementById('cliDocId').value = id;
             document.getElementById('cliCliente').value = cliente;
             document.getElementById('cliEmpresa').value = empresa;
             document.getElementById('cliTelefone').value = telefone;
             document.getElementById('cliValorPc').value = valor_pc;
-            document.getElementById('cliStatusCli').value = status_cliente || 'QUITADO';
             document.getElementById('cliAnuidade').value = anuidade;
             document.getElementById('modalClienteTitulo').innerText = 'Editar Registro';
             document.getElementById('modalCliente').classList.remove('hidden');
@@ -982,15 +917,14 @@
             const empresa = document.getElementById('cliEmpresa').value.trim();
             const telefone = document.getElementById('cliTelefone').value.trim();
             const valor_pc = parseFloat(document.getElementById('cliValorPc').value) || 0;
-            const status_cliente = document.getElementById('cliStatusCli').value.trim();
             const anuidade = document.getElementById('cliAnuidade').value.trim();
 
             try {
                 if (docId) {
-                    await updateDoc(doc(db, "clientes", docId), { cliente, empresa, marca: empresa, telefone, valor_pc, status_cliente, anuidade });
+                    await updateDoc(doc(db, "clientes", docId), { cliente, empresa, marca: empresa, telefone, valor_pc, anuidade });
                     await registrarLog(`Cliente atualizado: ${cliente}`);
                 } else {
-                    await addDoc(collection(db, "clientes"), { cliente, empresa, marca: empresa, telefone, valor_pc, status_cliente, anuidade });
+                    await addDoc(collection(db, "clientes"), { cliente, empresa, marca: empresa, telefone, valor_pc, anuidade });
                     await registrarLog(`Novo cliente cadastrado: ${cliente}`);
                 }
                 alert("Salvo com sucesso!");
@@ -1010,25 +944,17 @@
 
         window.filtrarClientes = function() {
             const termo = document.getElementById('buscaClientes').value.toLowerCase();
-            const filtrados = cacheClientes.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.empresa || item.marca || '').toLowerCase().includes(termo) || String(item.status_cliente || '').toLowerCase().includes(termo));
+            const filtrados = cacheClientes.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.empresa || item.marca || '').toLowerCase().includes(termo));
             renderizarTabelaClientes(filtrados);
         }
 
         window.gerarRelatorioClientes = function() {
             let janela = window.open('', '_blank');
             if (!janela) { alert("Permita pop-ups."); return; }
-            janela.document.write(`<html><head><title>Relatório - Base Marcas Financeiro</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Base Marcas Financeiro</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Empresa</th><th class="border border-slate-800 p-2.5">Tel</th><th class="border border-slate-800 p-2.5">Valor Pc</th><th class="border border-slate-800 p-2.5">Status</th><th class="border border-slate-800 p-2.5">Anuidade</th></tr>`);
-            cacheClientes.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.empresa || c.marca || ''}</td><td class="border border-slate-800 p-2.5">${c.telefone || ''}</td><td class="border border-slate-800 p-2.5">R$ ${Number(c.valor_pc||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 font-bold">${c.status_cliente}</td><td class="border border-slate-800 p-2.5">${c.anuidade || ''}</td></tr>`); });
+            janela.document.write(`<html><head><title>Relatório - Base Marcas Financeiro</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Base Marcas Financeiro</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Empresa</th><th class="border border-slate-800 p-2.5">Tel</th><th class="border border-slate-800 p-2.5">Valor Pc</th><th class="border border-slate-800 p-2.5">Anuidade</th></tr>`);
+            cacheClientes.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.empresa || c.marca || ''}</td><td class="border border-slate-800 p-2.5">${c.telefone || ''}</td><td class="border border-slate-800 p-2.5">R$ ${Number(c.valor_pc||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5">${c.anuidade || ''}</td></tr>`); });
             janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-5 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Imprimir / Salvar PDF</button></div></body></html>`);
             janela.document.close();
-        }
-
-        function atualizarDashboardClientes(total, pagantes, quitados, inadimplentes, cancelados) {
-            document.getElementById('dashTotalCli').innerText = total;
-            document.getElementById('dashPagantes').innerText = pagantes;
-            document.getElementById('dashQuitados').innerText = quitados;
-            document.getElementById('dashInadimplentes').innerText = inadimplentes;
-            document.getElementById('dashCancelados').innerText = cancelados;
         }
 
         window.carregarRPI = async function() {
@@ -1388,16 +1314,32 @@
                                 let cliId = String(linha['CLIENTE']).trim();
                                 let marca = String(linha['MARCA'] || '-').trim();
                                 let quantParStr = String(linha['QUANT PAR'] || '1/1');
-                                let parcelasPagas = 1, totalParcelas = 1;
+                                let parcelasPagas = 0, totalParcelas = 1;
                                 if (quantParStr.includes('/')) {
                                     let partes = quantParStr.split('/');
-                                    parcelasPagas = parseInt(partes[0]) || 1; 
+                                    parcelasPagas = parseInt(partes[0]) || 0; 
                                     totalParcelas = parseInt(partes[1]) || 1;
+                                } else {
+                                    parcelasPagas = parseInt(quantParStr) || 0;
                                 }
                                 let valorParcela = parseFloat(String(linha['VALOR PARCELA'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                                let valorRecebido = parseFloat(String(linha['TOTAL RECEBIDO'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                                let status = valorRecebido >= (parcelasPagas * valorParcela) ? 'pago' : 'pendente';
+                                let valorRecebido = parseFloat(String(linha['TOTAL RECEBIDO'] || linha['VALOR PAGO'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
                                 let cnpj = String(linha['CNPJ'] || '').trim();
+
+                                let statusPlanilha = String(linha['STATUS'] || linha['Status'] || linha['SITUAÇÃO'] || linha['Situacao'] || '').trim().toUpperCase();
+                                let status = 'pendente';
+
+                                if (statusPlanilha.includes('INADIMPLENTE') || statusPlanilha.includes('PENDENTE') || statusPlanilha.includes('ATRASADO') || statusPlanilha.includes('EM ABERTO')) {
+                                    status = 'pendente';
+                                } else if (statusPlanilha.includes('PAGO') || statusPlanilha.includes('QUITADO')) {
+                                    status = 'pago';
+                                } else {
+                                    if (parcelasPagas > 0 && valorRecebido > 0 && valorRecebido >= (parcelasPagas * valorParcela)) {
+                                        status = 'pago';
+                                    } else {
+                                        status = 'pendente';
+                                    }
+                                }
 
                                 itensCobranca.push({ cliente_id: cliId, marca: marca, cnpj: cnpj, dia_vencimento: diaVencimento, valor_total: valorParcela, valor_pago: valorRecebido, quantidade_parcelas: totalParcelas, parcelas_pagas: parcelasPagas, status_pagamento: status });
                             }
@@ -1413,12 +1355,6 @@
                         for (let nomeAba of workbook.SheetNames) {
                             const aba = workbook.Sheets[nomeAba];
                             const json = XLSX.utils.sheet_to_json(aba);
-                            const upperAba = nomeAba.toUpperCase();
-                            
-                            let defaultStatus = 'QUITADO';
-                            if (upperAba.includes('CANCELADO')) defaultStatus = 'CANCELADO';
-                            if (upperAba.includes('INADIMPLENTE')) defaultStatus = 'INADIMPLENTE';
-                            if (upperAba.includes('PAGANTE')) defaultStatus = 'PAGANTE';
 
                             for (let linha of json) {
                                 let cli = String(linha['CLIENTE'] || linha['Cliente'] || linha['NOME'] || '').trim();
@@ -1426,11 +1362,9 @@
                                 let empresa = String(linha['EMPRESA'] || linha['Empresa'] || linha['MARCA'] || linha['Marca'] || '-').trim();
                                 let telefone = String(linha['TEL.'] || linha['Tel'] || linha['TELEFONE'] || '').trim();
                                 let valorPc = parseFloat(String(linha['VALOR PC'] || linha['Valor Pc'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                                
-                                let statusCli = String(linha['STATUS'] || linha['Status'] || defaultStatus).trim().toUpperCase();
                                 let anuidade = String(linha['ANUIDADE'] || linha['Anuidade'] || '').trim();
                                 
-                                itensClientes.push({ cliente: cli, empresa: empresa, marca: empresa, telefone: telefone, valor_pc: valorPc, status_cliente: statusCli, anuidade: anuidade });
+                                itensClientes.push({ cliente: cli, empresa: empresa, marca: empresa, telefone: telefone, valor_pc: valorPc, anuidade: anuidade });
                             }
                         }
                         await executarEmLotes("clientes", itensClientes, (d) => `${String(d.cliente || '').trim()}_${String(d.empresa || d.marca || '').trim()}`.toUpperCase());
@@ -1726,19 +1660,10 @@
                                     <input type="text" id="cliTelefone" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold">
                                 </div>
                             </div>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
                                     <label class="block text-[10px] font-bold text-slate-400 uppercase">Valor Pc (R$)</label>
                                     <input type="number" step="0.01" id="cliValorPc" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold" required>
-                                </div>
-                                <div>
-                                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Status</label>
-                                    <select id="cliStatusCli" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold">
-                                        <option value="PAGANTE">PAGANTE</option>
-                                        <option value="QUITADO">QUITADO</option>
-                                        <option value="INADIMPLENTE">INADIMPLENTE</option>
-                                        <option value="CANCELADO">CANCELADO</option>
-                                    </select>
                                 </div>
                                 <div>
                                     <label class="block text-[10px] font-bold text-slate-400 uppercase">Anuidade</label>
@@ -1841,7 +1766,7 @@
                         </div>
 
                         <div class="p-3 bg-brand-dark border-t border-brand-border flex gap-2">
-                            <input type="text" id="aiPromptInput" onkeydown="if(event.key === 'Enter') enviarPerguntaAI();" placeholder="Ex: Quais clientes estão inadimplentes? / Resuma os processos em oposição..." class="flex-1 px-4 py-2.5 rounded-xl border border-brand-border bg-brand-card text-white text-xs focus:outline-none focus:border-brand-gold">
+                            <input type="text" id="aiPromptInput" onkeydown="if(event.key === 'Enter') enviarPerguntaAI();" placeholder="Ex: Quais os maiores clientes? / Resuma os processos em oposição..." class="flex-1 px-4 py-2.5 rounded-xl border border-brand-border bg-brand-card text-white text-xs focus:outline-none focus:border-brand-gold">
                             <button onclick="enviarPerguntaAI()" class="px-5 py-2.5 bg-brand-gold hover:bg-brand-goldHover text-brand-dark font-extrabold rounded-xl text-xs shadow">Enviar</button>
                         </div>
                     </div>
@@ -1851,60 +1776,33 @@
                     <div class="flex justify-between items-center mb-6">
                         <div>
                             <h2 class="text-xl font-extrabold text-white tracking-tight">Dashboard Executivo</h2>
-                            <p class="text-slate-400 text-xs mt-0.5">Visão consolidada do faturamento, carteira de clientes segmentada e processos.</p>
+                            <p class="text-slate-400 text-xs mt-0.5">Visão consolidada do faturamento, carteira de clientes e processos.</p>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3.5 mb-5">
-                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border hover:border-brand-gold/40 transition-all relative overflow-hidden">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total Clientes</p>
-                            <p id="dashCardTotalClientes" class="text-xl font-black text-white mt-1">0</p>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
+                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-brand-gold/40 transition-all">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total de Clientes (Base Marcas)</p>
+                            <p id="dashCardTotalClientes" class="text-2xl font-black text-white mt-1.5">0</p>
                         </div>
-                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border hover:border-blue-500/40 transition-all relative overflow-hidden">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Pagantes</p>
-                            <p id="dashCardPagantes" class="text-xl font-black text-blue-400 mt-1">0</p>
-                        </div>
-                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border hover:border-emerald-500/40 transition-all relative overflow-hidden">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Quitados</p>
-                            <p id="dashCardQuitados" class="text-xl font-black text-emerald-400 mt-1">0</p>
-                        </div>
-                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border hover:border-amber-500/40 transition-all relative overflow-hidden">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Inadimplentes</p>
-                            <p id="dashCardInadimplentes" class="text-xl font-black text-amber-400 mt-1">0</p>
-                        </div>
-                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border hover:border-rose-500/40 transition-all relative overflow-hidden col-span-2 md:col-span-1">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Cancelados</p>
-                            <p id="dashCardCancelados" class="text-xl font-black text-rose-400 mt-1">0</p>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
                         <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-brand-gold/40 transition-all">
                             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Valor Total de Parcelas (PC)</p>
-                            <p id="dashCardValorTotal" class="text-xl font-black text-brand-gold mt-1.5">R$ 0,00</p>
+                            <p id="dashCardValorTotal" class="text-2xl font-black text-brand-gold mt-1.5">R$ 0,00</p>
                         </div>
                         <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-emerald-500/40 transition-all">
                             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total Arrecadado (Faturamento)</p>
-                            <p id="dashCardArrecadado" class="text-xl font-black text-emerald-400 mt-1.5">R$ 0,00</p>
+                            <p id="dashCardArrecadado" class="text-2xl font-black text-emerald-400 mt-1.5">R$ 0,00</p>
                         </div>
                         <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-blue-500/40 transition-all">
                             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Processos INPI (RPI)</p>
-                            <p id="dashCardRpi" class="text-xl font-black text-blue-400 mt-1.5">0</p>
+                            <p id="dashCardRpi" class="text-2xl font-black text-blue-400 mt-1.5">0</p>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
-                        <div class="bg-brand-card p-5 rounded-2xl border border-brand-border shadow-sm">
-                            <h3 class="font-bold text-white text-xs uppercase tracking-wider mb-4">Segmentação da Carteira de Clientes</h3>
-                            <div class="h-60 relative flex justify-center items-center">
-                                <canvas id="chartStatusClientes"></canvas>
-                            </div>
-                        </div>
-                        <div class="bg-brand-card p-5 rounded-2xl border border-brand-border shadow-sm">
-                            <h3 class="font-bold text-white text-xs uppercase tracking-wider mb-4">Distribuição de Fases dos Processos (RPI)</h3>
-                            <div class="h-60 relative flex justify-center items-center">
-                                <canvas id="chartFasesRpi"></canvas>
-                            </div>
+                    <div class="bg-brand-card p-5 rounded-2xl border border-brand-border shadow-sm mb-8">
+                        <h3 class="font-bold text-white text-xs uppercase tracking-wider mb-4">Distribuição de Fases dos Processos (RPI)</h3>
+                        <div class="h-64 relative flex justify-center items-center">
+                            <canvas id="chartFasesRpi"></canvas>
                         </div>
                     </div>
 
@@ -1921,12 +1819,11 @@
                                     <tr>
                                         <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
                                         <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Marca / Empresa</th>
-                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
                                         <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Valor Pc</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tabelaUltimosRegistros" class="divide-y divide-brand-border/40">
-                                    <tr><td colspan="4" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando...</td></tr>
+                                    <tr><td colspan="3" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1996,31 +1893,15 @@
                 <div id="aba-clientes" class="aba-conteudo hidden">
                     <div class="flex justify-between items-center mb-6">
                         <div>
-                            <h2 class="text-xl font-extrabold text-white tracking-tight">Base Marcas Financeiro</h2>
-                            <p class="text-slate-400 text-xs mt-0.5">Gestão segmentada de Pagantes, Quitados, Inadimplentes e Cancelados.</p>
+                            <h2 class="text-xl font-extrabold text-white tracking-tight">Base Marcas</h2>
+                            <p class="text-slate-400 text-xs mt-0.5">Gestão centralizada de clientes e marcas cadastradas.</p>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3.5 mb-6">
-                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-brand-gold">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total</p>
-                            <p id="dashTotalCli" class="text-xl font-black text-white mt-1">0</p>
-                        </div>
-                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-blue-500">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Pagantes</p>
-                            <p id="dashPagantes" class="text-xl font-black text-blue-400 mt-1">0</p>
-                        </div>
-                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-emerald-500">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Quitados</p>
-                            <p id="dashQuitados" class="text-xl font-black text-emerald-400 mt-1">0</p>
-                        </div>
-                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-amber-500">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Inadimplentes</p>
-                            <p id="dashInadimplentes" class="text-xl font-black text-amber-400 mt-1">0</p>
-                        </div>
-                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-rose-500 col-span-2 md:col-span-1">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Cancelados</p>
-                            <p id="dashCancelados" class="text-xl font-black text-rose-400 mt-1">0</p>
+                    <div class="grid grid-cols-1 gap-3.5 mb-6">
+                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-brand-gold max-w-xs">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total de Clientes</p>
+                            <p id="dashTotalCli" class="text-2xl font-black text-white mt-1">0</p>
                         </div>
                     </div>
 
@@ -2029,7 +1910,7 @@
                         <div class="flex flex-wrap items-center gap-2">
                             <button onclick="abrirModalCliente()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow">+ Novo</button>
                             <button onclick="gerarRelatorioClientes()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">PDF</button>
-                            <button onclick="exportarParaExcel('Base_Marcas_Financeiro', cacheClientes)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
+                            <button onclick="exportarParaExcel('Base_Marcas', cacheClientes)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
                             <input type="file" id="upClientes" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'clientes')" />
                             <label for="upClientes" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs">
                                 <span id="upClientesText">Importar</span>
@@ -2046,7 +1927,6 @@
                                         <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Empresa</th>
                                         <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tel. / WhatsApp</th>
                                         <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Valor Pc</th>
-                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
                                         <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Anuidade</th>
                                         <th class="px-4 md:px-6 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ações</th>
                                     </tr>
