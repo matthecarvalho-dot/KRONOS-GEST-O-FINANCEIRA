@@ -112,7 +112,6 @@
         let cacheMensalFinanceiro = [];
         let cacheCancelados = [];
 
-        // Configurações do Gemini AI
         window.salvarApiKeyGemini = function() {
             const key = document.getElementById('inputGeminiApiKey').value.trim();
             if (!key) { alert("Insira uma chave de API válida."); return; }
@@ -171,8 +170,8 @@
                     - Clientes Cancelados com Rescisão: ${cacheCancelados.length}
                     - Resumo de Clientes: ${JSON.stringify(cacheClientes.slice(0, 30))}
                     - Faturamento Ciclos (Cobranças): ${JSON.stringify(cacheCobrancas.slice(0, 30))}
-                    - Mensal Financeiro: ${cacheMensalFinanceiro.length} registros.
-                    - Processos INPI (RPI): ${rpiCache.length} processos cadastrados. Amostra: ${JSON.stringify(rpiCache.slice(0, 20))}
+                    - Mensal Financeiro: ${cacheMensalFinanceiro.length} registros. Amostra: ${JSON.stringify(cacheMensalFinanceiro.slice(0, 30))}
+                    - Processos INPI (RPI): ${rpiCache.length} processos cadastrados.
                     - Guias GRU: ${cacheGRU.length} guias.
                     
                     Responda à pergunta do usuário de forma profissional, direta, objetiva e útil para a tomada de decisão executiva.
@@ -583,13 +582,12 @@
                 });
 
                 cacheClientes = [];
-                let totalCli = 0, valorTotalPc = 0;
+                let totalCli = 0;
                 let ultimosClientes = [];
                 snapCli.forEach(d => {
                     const dat = d.data();
                     cacheClientes.push({ id: d.id, ...dat });
                     totalCli++;
-                    valorTotalPc += Number(dat.valor_pc || 0);
                     ultimosClientes.push({ cliente: dat.cliente, marca: dat.empresa || dat.marca, valor: dat.valor_pc || 0, telefone: dat.telefone || '' });
                 });
 
@@ -1101,7 +1099,6 @@
                 `;
             });
 
-            // Gráfico Mensal
             if (chartMensalInstance) chartMensalInstance.destroy();
             const ctx = document.getElementById('chartMensalFinanceiro').getContext('2d');
             chartMensalInstance = new Chart(ctx, {
@@ -1561,17 +1558,70 @@
                         let itensMensalFin = [];
                         for (let nomeAba of workbook.SheetNames) {
                             const aba = workbook.Sheets[nomeAba];
-                            const json = XLSX.utils.sheet_to_json(aba);
-                            const mesAbaPadrao = nomeAba; // Nome da aba pode ser o mês (ex: "Janeiro", "Fevereiro")
-                            for (let linha of json) {
-                                let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
-                                if (!cli) continue;
-                                let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
-                                let mesAno = String(linha['MÊS'] || linha['Mes'] || linha['MÊS/ANO'] || linha['MES_ANO'] || mesAbaPadrao).trim();
-                                let parcela = String(linha['PARCELA'] || linha['Parcela'] || '-').trim();
-                                let valor = parseFloat(String(linha['VALOR'] || linha['Valor'] || linha['VALOR PAGO'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                                let status = String(linha['STATUS'] || linha['Status'] || 'PAGO').trim().toUpperCase();
-                                itensMensalFin.push({ cliente: cli, marca: marca, mes_ano: mesAno, parcela: parcela, valor: valor, status: status });
+                            const jsonRows = XLSX.utils.sheet_to_json(aba, {header: 1});
+                            
+                            // Extrair o nome do cliente da metatag "NOME:"
+                            let clienteNome = "Cliente";
+                            for (let r = 0; r < jsonRows.length; r++) {
+                                let row = jsonRows[r];
+                                for (let c = 0; c < row.length; c++) {
+                                    if (row[c] && String(row[c]).trim().toUpperCase() === 'NOME:') {
+                                        if (c + 1 < row.length && row[c+1]) {
+                                            clienteNome = String(row[c+1]).trim();
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Encontrar a linha de cabeçalho com DATA e MARCA
+                            let headerIdx = -1;
+                            for (let r = 0; r < jsonRows.length; r++) {
+                                let rowStr = jsonRows[r].map(v => String(v || '').trim().toUpperCase());
+                                if (rowStr.some(s => s.includes('DATA')) && rowStr.some(s => s.includes('MARCA'))) {
+                                    headerIdx = r;
+                                    break;
+                                }
+                            }
+
+                            if (headerIdx !== -1) {
+                                let headerRow = jsonRows[headerIdx].map(v => String(v || '').trim().toUpperCase());
+                                let idxData = headerRow.findIndex(v => v.includes('DATA'));
+                                let idxMarca = headerRow.findIndex(v => v.includes('MARCA'));
+                                let idxParcela = headerRow.findIndex(v => v.includes('PARCELA'));
+                                let idxValReceber = headerRow.findIndex(v => v.includes('VALOR A RECEBER') || v.includes('RECEBER') || v.includes('VALOR'));
+
+                                for (let r = headerIdx + 1; r < jsonRows.length; r++) {
+                                    let row = jsonRows[r];
+                                    if (!row || row.length === 0) continue;
+                                    let dataVal = idxData !== -1 ? row[idxData] : null;
+                                    let marcaVal = idxMarca !== -1 ? row[idxMarca] : '';
+                                    
+                                    if (!dataVal || !marcaVal || String(marcaVal).toUpperCase().includes('TOTAL')) continue;
+
+                                    let parcelaVal = idxParcela !== -1 ? (row[idxParcela] || 'Mensalidade') : 'Mensalidade';
+                                    let rawValor = idxValReceber !== -1 ? row[idxValReceber] : 0;
+                                    let valorNum = parseFloat(String(rawValor || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+
+                                    itensMensalFin.push({
+                                        cliente: clienteNome,
+                                        marca: String(marcaVal).trim(),
+                                        mes_ano: nomeAba,
+                                        parcela: String(parcelaVal).trim(),
+                                        valor: valorNum,
+                                        status: 'PAGO'
+                                    });
+                                }
+                            } else {
+                                const json = XLSX.utils.sheet_to_json(aba);
+                                for (let linha of json) {
+                                    let cli = String(linha['CLIENTE'] || linha['Cliente'] || clienteNome).trim();
+                                    let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
+                                    let mesAno = String(linha['MÊS'] || linha['Mes'] || nomeAba).trim();
+                                    let parcela = String(linha['PARCELA'] || linha['Parcela'] || '-').trim();
+                                    let valor = parseFloat(String(linha['VALOR'] || linha['Valor'] || linha['VALOR PAGO'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+                                    let status = String(linha['STATUS'] || linha['Status'] || 'PAGO').trim().toUpperCase();
+                                    itensMensalFin.push({ cliente: cli, marca: marca, mes_ano: mesAno, parcela: parcela, valor: valor, status: status });
+                                }
                             }
                         }
                         await executarEmLotes("mensal_financeiro", itensMensalFin, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.mes_ano || '').trim()}_${String(d.parcela || '').trim()}`.toUpperCase());
@@ -1954,7 +2004,6 @@
                         </div>
                     </div>
 
-                    <!-- Configuração da Chave da API -->
                     <div class="bg-brand-card p-5 rounded-2xl border border-brand-border mb-6 flex flex-wrap md:flex-nowrap items-center justify-between gap-4">
                         <div>
                             <h3 class="font-bold text-white text-xs uppercase tracking-wider">Configuração da Chave Gemini API</h3>
@@ -1967,7 +2016,6 @@
                     </div>
                     <p id="statusApiKey" class="text-xs mb-4 text-center md:text-left"></p>
 
-                    <!-- Interface do Chat -->
                     <div class="bg-brand-card rounded-2xl border border-brand-border flex flex-col h-[60vh] shadow-xl overflow-hidden">
                         <div class="p-4 bg-[#132238] border-b border-brand-border flex justify-between items-center">
                             <div class="flex items-center gap-2">
