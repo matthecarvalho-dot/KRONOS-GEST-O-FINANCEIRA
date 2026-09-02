@@ -102,13 +102,15 @@
         const EMAIL_ADMIN = "matthecarvalho@gmail.com";
         let cicloAtual = 5;
         let chartFasesInstance = null;
+        let chartMensalInstance = null;
 
         let cacheCobrancas = [];
         let cacheClientes = [];
         let rpiCache = [];
         let cacheGRU = [];
         let cacheMensal = [];
-        let cacheParcelas = [];
+        let cacheMensalFinanceiro = [];
+        let cacheCancelados = [];
 
         // Configurações do Gemini AI
         window.salvarApiKeyGemini = function() {
@@ -166,10 +168,12 @@
                     Você é o Kronos AI, assistente executivo inteligente do ERP Kronos GS, especializado em gestão financeira, marcas, patentes e processos no INPI para escritórios jurídicos.
                     Aqui estão os dados consolidados atuais do sistema:
                     - Total de Clientes na Base Marcas: ${cacheClientes.length}
+                    - Clientes Cancelados com Rescisão: ${cacheCancelados.length}
                     - Resumo de Clientes: ${JSON.stringify(cacheClientes.slice(0, 30))}
                     - Faturamento Ciclos (Cobranças): ${JSON.stringify(cacheCobrancas.slice(0, 30))}
+                    - Mensal Financeiro: ${cacheMensalFinanceiro.length} registros.
                     - Processos INPI (RPI): ${rpiCache.length} processos cadastrados. Amostra: ${JSON.stringify(rpiCache.slice(0, 20))}
-                    - Guias GRU: ${cacheGRU.length} guias. Amostra: ${JSON.stringify(cacheGRU.slice(0, 15))}
+                    - Guias GRU: ${cacheGRU.length} guias.
                     
                     Responda à pergunta do usuário de forma profissional, direta, objetiva e útil para a tomada de decisão executiva.
                     Pergunta do Usuário: ${promptText}
@@ -222,7 +226,7 @@
         };
 
         window.gerarAnaliseExecutivaAutomatica = function() {
-            document.getElementById('aiPromptInput').value = "Faça um resumo executivo completo da saúde financeira do escritório, destacando inadimplências, volume de processos INPI críticos e recomendações estratégicas.";
+            document.getElementById('aiPromptInput').value = "Faça um resumo executivo completo da saúde financeira do escritório, destacando inadimplências, cancelamentos com rescisão, volume de processos INPI críticos e recomendações estratégicas.";
             enviarPerguntaAI();
         };
 
@@ -299,11 +303,11 @@
         };
 
         window.zerarBancoCompletoAdmin = async function() {
-            if (!confirm("⚠️ ATENÇÃO: Deseja realmente apagar TODOS os dados de clientes, faturamento, RPI, GRU, mensal e parcelas do sistema? Esta ação é irreversível!")) return;
+            if (!confirm("⚠️ ATENÇÃO: Deseja realmente apagar TODOS os dados de clientes, cancelados, faturamento, RPI, GRU, mensal e mensal financeiro do sistema? Esta ação é irreversível!")) return;
             if (!confirm("Tem certeza absoluta? Todos os dados operacionais serão apagados.")) return;
             
             try {
-                const colecoes = ['clientes', 'cobrancas', 'rpi_marcas', 'gru', 'mensal', 'parcelas'];
+                const colecoes = ['clientes', 'clientes_cancelados', 'cobrancas', 'rpi_marcas', 'gru', 'mensal', 'mensal_financeiro'];
                 for (let nomeCol of colecoes) {
                     const snap = await getDocs(collection(db, nomeCol));
                     if (snap.empty) continue;
@@ -532,10 +536,11 @@
             if(abaId === 'dashboard') carregarDashboardGeral();
             if(abaId === 'cobrancas') carregarCobrancas(cicloAtual);
             if(abaId === 'clientes') carregarClientes();
+            if(abaId === 'cancelados') carregarCancelados();
+            if(abaId === 'mensal_financeiro') carregarMensalFinanceiro();
             if(abaId === 'rpi') carregarRPI();
             if(abaId === 'gru') carregarGRU();
             if(abaId === 'mensal') carregarMensal();
-            if(abaId === 'parcelas') carregarParcelas();
             if(abaId === 'admin') carregarPainelAdmin();
         }
 
@@ -558,13 +563,14 @@
 
         window.carregarDashboardGeral = async function() {
             try {
-                const [snapCob, snapCli, snapRpi, snapGru, snapMensal, snapParc] = await Promise.all([
+                const [snapCob, snapCli, snapCancelados, snapRpi, snapGru, snapMensal, snapMensalFin] = await Promise.all([
                     getDocs(collection(db, "cobrancas")),
                     getDocs(collection(db, "clientes")),
+                    getDocs(collection(db, "clientes_cancelados")),
                     getDocs(collection(db, "rpi_marcas")),
                     getDocs(collection(db, "gru")),
                     getDocs(collection(db, "mensal")),
-                    getDocs(collection(db, "parcelas"))
+                    getDocs(collection(db, "mensal_financeiro"))
                 ]);
 
                 cacheCobrancas = [];
@@ -579,7 +585,6 @@
                 cacheClientes = [];
                 let totalCli = 0, valorTotalPc = 0;
                 let ultimosClientes = [];
-                
                 snapCli.forEach(d => {
                     const dat = d.data();
                     cacheClientes.push({ id: d.id, ...dat });
@@ -587,6 +592,9 @@
                     valorTotalPc += Number(dat.valor_pc || 0);
                     ultimosClientes.push({ cliente: dat.cliente, marca: dat.empresa || dat.marca, valor: dat.valor_pc || 0, telefone: dat.telefone || '' });
                 });
+
+                cacheCancelados = [];
+                snapCancelados.forEach(d => cacheCancelados.push({ id: d.id, ...d.data() }));
 
                 rpiCache = [];
                 let contFasesMap = {};
@@ -608,11 +616,11 @@
                 cacheMensal = [];
                 snapMensal.forEach(d => cacheMensal.push({ id: d.id, ...d.data() }));
 
-                cacheParcelas = [];
-                snapParc.forEach(d => cacheParcelas.push({ id: d.id, ...d.data() }));
+                cacheMensalFinanceiro = [];
+                snapMensalFin.forEach(d => cacheMensalFinanceiro.push({ id: d.id, ...d.data() }));
 
                 document.getElementById('dashCardTotalClientes').innerText = totalCli;
-                document.getElementById('dashCardValorTotal').innerText = `R$ ${valorTotalPc.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+                document.getElementById('dashCardCancelados').innerText = snapCancelados.size;
                 document.getElementById('dashCardArrecadado').innerText = `R$ ${totalPago.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
                 document.getElementById('dashCardRpi').innerText = snapRpi.size;
 
@@ -957,6 +965,203 @@
             janela.document.close();
         }
 
+        // CLIENTES CANCELADOS COM RESCISÃO
+        window.carregarCancelados = async function() {
+            const tabela = document.getElementById('tabelaCancelados');
+            tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando cancelados...</td></tr>`;
+            try {
+                const querySnapshot = await getDocs(collection(db, "clientes_cancelados"));
+                cacheCancelados = [];
+                tabela.innerHTML = '';
+                if (querySnapshot.empty) {
+                    tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum cliente cancelado registrado.</td></tr>`;
+                    document.getElementById('dashTotalCancelados').innerText = 0;
+                    return;
+                }
+                querySnapshot.forEach((docSnap) => {
+                    cacheCancelados.push({ id: docSnap.id, ...docSnap.data() });
+                });
+                renderizarTabelaCancelados(cacheCancelados);
+                document.getElementById('dashTotalCancelados').innerText = cacheCancelados.length;
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-6 text-center text-rose-400 text-xs">Erro ao carregar.</td></tr>`; }
+        }
+
+        window.renderizarTabelaCancelados = function(dados) {
+            const tabela = document.getElementById('tabelaCancelados');
+            tabela.innerHTML = '';
+            if (dados.length === 0) { tabela.innerHTML = `<tr><td colspan="5" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro encontrado.</td></tr>`; return; }
+            let html = '';
+            dados.forEach(data => {
+                html += `
+                    <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
+                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td>
+                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.marca || ''}</td>
+                        <td class="px-4 md:px-6 py-3.5 text-xs text-amber-400 font-medium">${data.data_rescisao || ''}</td>
+                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-300">${data.motivo || 'Rescisão contratual'}</td>
+                        <td class="px-4 md:px-6 py-3.5 text-xs text-right">
+                            <button onclick="excluirCancelado('${data.id}')" class="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-[11px] font-medium rounded-lg transition-all border border-rose-500/20">Excluir</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tabela.innerHTML = html;
+        }
+
+        window.abrirModalCancelado = function() {
+            document.getElementById('formCancelado').reset();
+            document.getElementById('modalCancelado').classList.remove('hidden');
+        }
+        window.fecharModalCancelado = function() { document.getElementById('modalCancelado').classList.add('hidden'); }
+
+        window.salvarCanceladoManual = async function(event) {
+            event.preventDefault();
+            const cliente = document.getElementById('cancCliente').value.trim();
+            const marca = document.getElementById('cancMarca').value.trim();
+            const dataRescisao = document.getElementById('cancData').value.trim();
+            const motivo = document.getElementById('cancMotivo').value.trim();
+
+            try {
+                await addDoc(collection(db, "clientes_cancelados"), { cliente, marca, data_rescisao: dataRescisao, motivo });
+                await registrarLog(`Cliente cancelado com rescisão cadastrado: ${cliente}`);
+                alert("Registrado com sucesso!");
+                fecharModalCancelado();
+                carregarCancelados();
+            } catch (e) { alert("Erro ao salvar."); }
+        }
+
+        window.excluirCancelado = async function(docId) {
+            if (!confirm("Deseja excluir este registro?")) return;
+            try {
+                await deleteDoc(doc(db, "clientes_cancelados", docId));
+                await registrarLog(`Registro de cancelado excluído ID: ${docId}`);
+                carregarCancelados();
+            } catch (e) { alert("Erro."); }
+        }
+
+        window.filtrarCancelados = function() {
+            const termo = document.getElementById('buscaCancelados').value.toLowerCase();
+            const filtrados = cacheCancelados.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.marca || '').toLowerCase().includes(termo) || String(item.motivo || '').toLowerCase().includes(termo));
+            renderizarTabelaCancelados(filtrados);
+        }
+
+        window.gerarRelatorioCancelados = function() {
+            let janela = window.open('', '_blank');
+            if (!janela) { alert("Permita pop-ups."); return; }
+            janela.document.write(`<html><head><title>Relatório - Clientes Cancelados com Rescisão</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Clientes Cancelados com Rescisão</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Marca</th><th class="border border-slate-800 p-2.5">Data Rescisão</th><th class="border border-slate-800 p-2.5">Motivo</th></tr>`);
+            cacheCancelados.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.marca || ''}</td><td class="border border-slate-800 p-2.5 text-amber-400">${c.data_rescisao || ''}</td><td class="border border-slate-800 p-2.5">${c.motivo || ''}</td></tr>`); });
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-5 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.close();
+        }
+
+        // MENSAL FINANCEIRO (SEPARADO POR MESES COM DASHBOARD)
+        window.carregarMensalFinanceiro = async function() {
+            const tabela = document.getElementById('tabelaMensalFinanceiro');
+            tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando Mensal Financeiro...</td></tr>`;
+            try {
+                const querySnapshot = await getDocs(collection(db, "mensal_financeiro"));
+                cacheMensalFinanceiro = [];
+                tabela.innerHTML = '';
+                if (querySnapshot.empty) {
+                    tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro financeiro mensal. Importe a planilha.</td></tr>`;
+                    renderizarDashboardMensalFinanceiro({});
+                    return;
+                }
+                let totaisPorMes = {};
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.id ? { id: docSnap.id, ...docSnap.data() } : docSnap.data();
+                    cacheMensalFinanceiro.push(data);
+                    
+                    let mesAno = String(data.mes_ano || data.vencimento || 'Geral').trim();
+                    let val = Number(data.valor || data.valor_pago || 0);
+                    if (data.status === 'PAGO' || !data.status) {
+                        totaisPorMes[mesAno] = (totaisPorMes[mesAno] || 0) + val;
+                    }
+                });
+
+                renderizarDashboardMensalFinanceiro(totaisPorMes);
+                renderizarTabelaMensalFinanceiro(cacheMensalFinanceiro);
+            } catch (error) { tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-rose-400 text-xs">Erro ao carregar.</td></tr>`; }
+        }
+
+        window.renderizarDashboardMensalFinanceiro = function(totaisPorMes) {
+            const container = document.getElementById('cardsMensalFinanceiro');
+            container.innerHTML = '';
+            const chavesMeses = Object.keys(totaisPorMes);
+            if (chavesMeses.length === 0) {
+                container.innerHTML = `<div class="bg-brand-card p-4 rounded-2xl border border-brand-border text-slate-400 text-xs">Nenhum valor recebido registrado por mês.</div>`;
+                return;
+            }
+            chavesMeses.forEach(mes => {
+                let total = totaisPorMes[mes];
+                container.innerHTML += `
+                    <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-brand-gold/40 transition-all">
+                        <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Mês: ${mes}</p>
+                        <p class="text-xl font-black text-emerald-400 mt-1">R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                    </div>
+                `;
+            });
+
+            // Gráfico Mensal
+            if (chartMensalInstance) chartMensalInstance.destroy();
+            const ctx = document.getElementById('chartMensalFinanceiro').getContext('2d');
+            chartMensalInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: chavesMeses,
+                    datasets: [{
+                        label: 'Total Recebido (R$)',
+                        data: Object.values(totaisPorMes),
+                        backgroundColor: '#10B981',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#94A3B8', font: { size: 9 } }, grid: { display: false } },
+                        y: { ticks: { color: '#94A3B8', font: { size: 9 } }, grid: { color: '#172A45' } }
+                    }
+                }
+            });
+        }
+
+        window.renderizarTabelaMensalFinanceiro = function(dados) {
+            const tabela = document.getElementById('tabelaMensalFinanceiro');
+            tabela.innerHTML = '';
+            if (dados.length === 0) { tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro encontrado.</td></tr>`; return; }
+            let html = '';
+            dados.slice(0, 500).forEach(data => {
+                html += `
+                    <tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors">
+                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td>
+                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.marca || ''}</td>
+                        <td class="px-4 md:px-6 py-3.5 text-xs text-brand-gold font-semibold">${data.mes_ano || data.vencimento || '-'}</td>
+                        <td class="px-4 md:px-6 py-3.5 text-xs text-slate-300">${data.parcela || 'Mensalidade'}</td>
+                        <td class="px-4 md:px-6 py-3.5 text-xs text-emerald-400 font-semibold">R$ ${Number(data.valor || data.valor_pago || 0).toFixed(2)}</td>
+                        <td class="px-4 md:px-6 py-3.5 text-xs font-semibold uppercase text-slate-200">${data.status || 'PAGO'}</td>
+                    </tr>
+                `;
+            });
+            tabela.innerHTML = html;
+        }
+
+        window.filtrarMensalFinanceiro = function() {
+            const termo = document.getElementById('buscaMensalFinanceiro').value.toLowerCase();
+            const filtrados = cacheMensalFinanceiro.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.marca || '').toLowerCase().includes(termo) || String(item.mes_ano || '').toLowerCase().includes(termo));
+            renderizarTabelaMensalFinanceiro(filtrados);
+        }
+
+        window.gerarRelatorioMensalFinanceiro = function() {
+            let janela = window.open('', '_blank');
+            if (!janela) { alert("Permita pop-ups."); return; }
+            janela.document.write(`<html><head><title>Relatório - Mensal Financeiro</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Mensal Financeiro</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Marca</th><th class="border border-slate-800 p-2.5">Mês / Ano</th><th class="border border-slate-800 p-2.5">Parcela</th><th class="border border-slate-800 p-2.5">Valor</th><th class="border border-slate-800 p-2.5">Status</th></tr>`);
+            cacheMensalFinanceiro.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.marca}</td><td class="border border-slate-800 p-2.5">${c.mes_ano || c.vencimento || ''}</td><td class="border border-slate-800 p-2.5">${c.parcela || ''}</td><td class="border border-slate-800 p-2.5 text-emerald-400 font-semibold">R$ ${Number(c.valor||c.valor_pago||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.status || 'PAGO'}</td></tr>`); });
+            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-5 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Imprimir / Salvar PDF</button></div></body></html>`);
+            janela.document.close();
+        }
+
         window.carregarRPI = async function() {
             const tabela = document.getElementById('tabelaRPI');
             tabela.innerHTML = `<tr><td colspan="3" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando RPI...</td></tr>`;
@@ -1103,45 +1308,6 @@
             janela.document.close();
         }
 
-        window.carregarParcelas = async function() {
-            const tabela = document.getElementById('tabelaParcelas');
-            tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Carregando parcelas...</td></tr>`;
-            try {
-                const querySnapshot = await getDocs(collection(db, "parcelas"));
-                cacheParcelas = [];
-                tabela.innerHTML = '';
-                if (querySnapshot.empty) { tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro de parcelas. Importe a planilha.</td></tr>`; return; }
-                querySnapshot.forEach((docSnap) => { cacheParcelas.push({ id: docSnap.id, ...docSnap.data() }); });
-                renderizarTabelaParcelas(cacheParcelas);
-            } catch (error) { tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-rose-400 text-xs">Erro ao carregar.</td></tr>`; }
-        }
-
-        window.renderizarTabelaParcelas = function(dados) {
-            const tabela = document.getElementById('tabelaParcelas');
-            tabela.innerHTML = '';
-            if (dados.length === 0) { tabela.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Nenhum registro encontrado.</td></tr>`; return; }
-            let html = '';
-            dados.slice(0, 500).forEach(data => {
-                html += `<tr class="hover:bg-[#132238]/50 border-b border-brand-border/40 transition-colors"><td class="px-4 md:px-6 py-3.5 text-xs text-slate-200 font-medium">${data.cliente || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.marca || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-300">${data.parcela || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs text-brand-gold font-semibold">R$ ${Number(data.valor || 0).toFixed(2)}</td><td class="px-4 md:px-6 py-3.5 text-xs text-slate-400">${data.vencimento || ''}</td><td class="px-4 md:px-6 py-3.5 text-xs font-semibold text-emerald-400">${data.status || 'PAGO'}</td></tr>`;
-            });
-            tabela.innerHTML = html;
-        }
-
-        window.filtrarParcelas = function() {
-            const termo = document.getElementById('buscaParcelas').value.toLowerCase();
-            const filtrados = cacheParcelas.filter(item => String(item.cliente || '').toLowerCase().includes(termo) || String(item.marca || '').toLowerCase().includes(termo));
-            renderizarTabelaParcelas(filtrados);
-        }
-
-        window.gerarRelatorioParcelas = function() {
-            let janela = window.open('', '_blank');
-            if (!janela) { alert("Permita pop-ups."); return; }
-            janela.document.write(`<html><head><title>Relatório Planilha de Parcelas</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-slate-950 text-white p-10 font-sans"><h1 class="text-2xl font-bold text-amber-400 mb-1">Planilha de Parcelas</h1><p class="text-xs text-slate-400 mb-6">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p><table class="w-full border-collapse border border-slate-800 text-left text-xs"><tr class="bg-slate-900 text-amber-400"><th class="border border-slate-800 p-2.5">Cliente</th><th class="border border-slate-800 p-2.5">Marca</th><th class="border border-slate-800 p-2.5">Parcela</th><th class="border border-slate-800 p-2.5">Valor</th><th class="border border-slate-800 p-2.5">Vencimento</th><th class="border border-slate-800 p-2.5">Status</th></tr>`);
-            cacheParcelas.forEach(c => { janela.document.write(`<tr><td class="border border-slate-800 p-2.5 font-medium">${c.cliente}</td><td class="border border-slate-800 p-2.5 text-slate-300">${c.marca}</td><td class="border border-slate-800 p-2.5">${c.parcela}</td><td class="border border-slate-800 p-2.5 text-brand-gold font-semibold">R$ ${Number(c.valor||0).toFixed(2)}</td><td class="border border-slate-800 p-2.5">${c.vencimento}</td><td class="border border-slate-800 p-2.5 uppercase font-bold">${c.status}</td></tr>`); });
-            janela.document.write(`</table><div class="mt-8"><button onclick="window.print()" class="px-5 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Imprimir / Salvar PDF</button></div></body></html>`);
-            janela.document.close();
-        }
-
         window.carregarPainelAdmin = async function() {
             const container = document.getElementById('listaUsuariosAdmin');
             container.innerHTML = `
@@ -1152,7 +1318,7 @@
 
                 <div class="bg-rose-500/10 border border-rose-500/20 p-6 rounded-2xl shadow-sm mb-6">
                     <h3 class="text-base font-bold text-rose-400">⚠️ Zona de Perigo - Redefinição do Sistema</h3>
-                    <p class="text-slate-300 mt-1 text-xs">Apague todos os dados operacionais (clientes, faturamento, RPI, GRU, mensal e parcelas) para reiniciar as importações do zero com segurança.</p>
+                    <p class="text-slate-300 mt-1 text-xs">Apague todos os dados operacionais (clientes, cancelados, faturamento, RPI, GRU, mensal e mensal financeiro) para reiniciar as importações do zero com segurança.</p>
                     <button onclick="zerarBancoCompletoAdmin()" class="mt-4 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow flex items-center gap-2">
                         <span>🗑️</span> Zerar Todo o Banco de Dados do Sistema
                     </button>
@@ -1372,6 +1538,48 @@
                         carregarClientes();
                     }
 
+                    if (modulo === 'cancelados') {
+                        let itensCancelados = [];
+                        for (let nomeAba of workbook.SheetNames) {
+                            const aba = workbook.Sheets[nomeAba];
+                            const json = XLSX.utils.sheet_to_json(aba);
+                            for (let linha of json) {
+                                let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
+                                if (!cli) continue;
+                                let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
+                                let dataRescisao = String(linha['DATA RESCISÃO'] || linha['Data Rescisao'] || linha['DATA'] || '-').trim();
+                                let motivo = String(linha['MOTIVO'] || linha['Motivo'] || 'Rescisão contratual').trim();
+                                itensCancelados.push({ cliente: cli, marca: marca, data_rescisao: dataRescisao, motivo: motivo });
+                            }
+                        }
+                        await executarEmLotes("clientes_cancelados", itensCancelados, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}`.toUpperCase());
+                        await registrarLog("Planilha de Cancelados importada");
+                        carregarCancelados();
+                    }
+
+                    if (modulo === 'mensal_financeiro') {
+                        let itensMensalFin = [];
+                        for (let nomeAba of workbook.SheetNames) {
+                            const aba = workbook.Sheets[nomeAba];
+                            const json = XLSX.utils.sheet_to_json(aba);
+                            const mesAbaPadrao = nomeAba; // Nome da aba pode ser o mês (ex: "Janeiro", "Fevereiro")
+                            for (let linha of json) {
+                                let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
+                                if (!cli) continue;
+                                let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
+                                let mesAno = String(linha['MÊS'] || linha['Mes'] || linha['MÊS/ANO'] || linha['MES_ANO'] || mesAbaPadrao).trim();
+                                let parcela = String(linha['PARCELA'] || linha['Parcela'] || '-').trim();
+                                let valor = parseFloat(String(linha['VALOR'] || linha['Valor'] || linha['VALOR PAGO'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+                                let status = String(linha['STATUS'] || linha['Status'] || 'PAGO').trim().toUpperCase();
+                                itensMensalFin.push({ cliente: cli, marca: marca, mes_ano: mesAno, parcela: parcela, valor: valor, status: status });
+                            }
+                        }
+                        await executarEmLotes("mensal_financeiro", itensMensalFin, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.mes_ano || '').trim()}_${String(d.parcela || '').trim()}`.toUpperCase());
+                        await registrarLog("Planilha Mensal Financeiro importada");
+                        await window.sincronizarClientesGlobais(itensMensalFin);
+                        carregarMensalFinanceiro();
+                    }
+
                     if (modulo === 'rpi') {
                         let itensRpi = [];
                         for (let sheetName of workbook.SheetNames) {
@@ -1436,28 +1644,6 @@
                         await registrarLog("Base Administrativa importada (Todas as abas)");
                         await window.sincronizarClientesGlobais(itensMensal);
                         carregarMensal();
-                    }
-
-                    if (modulo === 'parcelas') {
-                        let itensParcelas = [];
-                        for (let nomeAba of workbook.SheetNames) {
-                            const aba = workbook.Sheets[nomeAba];
-                            const json = XLSX.utils.sheet_to_json(aba);
-                            for (let linha of json) {
-                                let cli = String(linha['CLIENTE'] || linha['Cliente'] || '').trim();
-                                if (!cli) continue;
-                                let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
-                                let parcela = String(linha['PARCELA'] || linha['Parcela'] || '-').trim();
-                                let valor = parseFloat(String(linha['VALOR'] || linha['Valor'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                                let vencimento = String(linha['VENCIMENTO'] || linha['Vencimento'] || '-').trim();
-                                let status = String(linha['STATUS'] || linha['Status'] || 'PAGO').trim();
-                                itensParcelas.push({ cliente: cli, marca: marca, parcela: parcela, valor: valor, vencimento: vencimento, status: status });
-                            }
-                        }
-                        await executarEmLotes("parcelas", itensParcelas, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.parcela || '').trim()}`.toUpperCase());
-                        await registrarLog("Planilha de Parcelas importada (Todas as abas)");
-                        await window.sincronizarClientesGlobais(itensParcelas);
-                        carregarParcelas();
                     }
 
                     alert(`Importado com sucesso!`);
@@ -1579,8 +1765,11 @@
                 <button id="btn-clientes" onclick="abrirAba('clientes')" class="btn-menu w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:bg-[#132238] rounded-xl font-medium text-xs transition-all text-left">
                     <span>👥</span> Base Marcas
                 </button>
-                <button id="btn-parcelas" onclick="abrirAba('parcelas')" class="btn-menu w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:bg-[#132238] rounded-xl font-medium text-xs transition-all text-left">
-                    <span>📋</span> Planilha de Parcelas
+                <button id="btn-cancelados" onclick="abrirAba('cancelados')" class="btn-menu w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:bg-[#132238] rounded-xl font-medium text-xs transition-all text-left">
+                    <span>🚫</span> Cancelados (Rescisão)
+                </button>
+                <button id="btn-mensal_financeiro" onclick="abrirAba('mensal_financeiro')" class="btn-menu w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:bg-[#132238] rounded-xl font-medium text-xs transition-all text-left">
+                    <span>📋</span> Mensal Financeiro
                 </button>
                 <button id="btn-rpi" onclick="abrirAba('rpi')" class="btn-menu w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:bg-[#132238] rounded-xl font-medium text-xs transition-all text-left">
                     <span>📖</span> Revistas RPI
@@ -1678,6 +1867,37 @@
                     </div>
                 </div>
 
+                <!-- MODAL CLIENTE CANCELADO -->
+                <div id="modalCancelado" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+                    <div class="bg-brand-card rounded-3xl shadow-2xl max-w-lg w-full p-7 border border-brand-border relative text-white">
+                        <h3 class="text-base font-bold text-white mb-5">Registrar Cancelamento com Rescisão</h3>
+                        <form id="formCancelado" onsubmit="salvarCanceladoManual(event)" class="space-y-3.5">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase">Cliente</label>
+                                <input type="text" id="cancCliente" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold" required>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Marca</label>
+                                    <input type="text" id="cancMarca" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Data da Rescisão</label>
+                                    <input type="text" id="cancData" placeholder="Ex: 15/08/2026" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold" required>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase">Motivo / Observação</label>
+                                <input type="text" id="cancMotivo" class="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-brand-border bg-brand-dark text-white text-xs focus:outline-none focus:border-brand-gold">
+                            </div>
+                            <div class="flex justify-end gap-2.5 pt-4 border-t border-brand-border">
+                                <button type="button" onclick="fecharModalCancelado()" class="px-4 py-2 bg-[#132238] hover:bg-brand-border text-slate-300 text-xs font-semibold rounded-xl">Cancelar</button>
+                                <button type="submit" class="px-5 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark text-xs font-extrabold rounded-xl shadow">Salvar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
                 <div id="modalCobranca" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
                     <div class="bg-brand-card rounded-3xl shadow-2xl max-w-lg w-full p-7 border border-brand-border relative text-white">
                         <h3 class="text-base font-bold text-white mb-5">Nova Cobrança / Faturamento</h3>
@@ -1760,7 +1980,7 @@
                         <div id="aiChatHistory" class="flex-1 p-4 overflow-y-auto space-y-3">
                             <div class="flex justify-start">
                                 <div class="bg-[#132238] text-slate-300 px-4 py-3 rounded-2xl rounded-tl-none text-xs border border-brand-border max-w-lg">
-                                    Olá! Sou o seu assistente Kronos AI conectado ao Gemini. Já tenho acesso aos dados carregados em suas abas (clientes, faturamento, RPI, GRU). Como posso ajudar na gestão do escritório hoje?
+                                    Olá! Sou o seu assistente Kronos AI conectado ao Gemini. Já tenho acesso aos dados carregados em suas abas (clientes, faturamento, rescisões, mensal financeiro, RPI, GRU). Como posso ajudar na gestão do escritório hoje?
                                 </div>
                             </div>
                         </div>
@@ -1776,7 +1996,7 @@
                     <div class="flex justify-between items-center mb-6">
                         <div>
                             <h2 class="text-xl font-extrabold text-white tracking-tight">Dashboard Executivo</h2>
-                            <p class="text-slate-400 text-xs mt-0.5">Visão consolidada do faturamento, carteira de clientes e processos.</p>
+                            <p class="text-slate-400 text-xs mt-0.5">Visão consolidada do faturamento, carteira de clientes, rescisões e processos.</p>
                         </div>
                     </div>
 
@@ -1785,9 +2005,9 @@
                             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total de Clientes (Base Marcas)</p>
                             <p id="dashCardTotalClientes" class="text-2xl font-black text-white mt-1.5">0</p>
                         </div>
-                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-brand-gold/40 transition-all">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Valor Total de Parcelas (PC)</p>
-                            <p id="dashCardValorTotal" class="text-2xl font-black text-brand-gold mt-1.5">R$ 0,00</p>
+                        <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-rose-500/40 transition-all">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Cancelados com Rescisão</p>
+                            <p id="dashCardCancelados" class="text-2xl font-black text-rose-400 mt-1.5">0</p>
                         </div>
                         <div class="bg-brand-card p-5 rounded-2xl shadow-sm border border-brand-border hover:border-emerald-500/40 transition-all">
                             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total Arrecadado (Faturamento)</p>
@@ -1937,22 +2157,31 @@
                     </div>
                 </div>
 
-                <div id="aba-parcelas" class="aba-conteudo hidden">
+                <!-- ABA CLIENTES CANCELADOS COM RESCISÃO -->
+                <div id="aba-cancelados" class="aba-conteudo hidden">
                     <div class="flex justify-between items-center mb-6">
                         <div>
-                            <h2 class="text-xl font-extrabold text-white tracking-tight">Planilha de Parcelas</h2>
-                            <p class="text-slate-400 text-xs mt-0.5">Controle detalhado de parcelas por cliente e marca.</p>
+                            <h2 class="text-xl font-extrabold text-white tracking-tight">Clientes Cancelados com Rescisão</h2>
+                            <p class="text-slate-400 text-xs mt-0.5">Controle de rescisões contratuais e encerramentos de vínculo.</p>
                         </div>
                     </div>
 
-                    <div class="bg-brand-card p-4 rounded-t-2xl border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
-                        <input type="text" id="buscaParcelas" onkeyup="filtrarParcelas()" placeholder="🔍 Pesquisar aba..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
+                    <div class="grid grid-cols-1 gap-3.5 mb-6">
+                        <div class="bg-brand-card p-4 rounded-2xl shadow-sm border border-brand-border border-l-4 border-l-rose-500 max-w-xs">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total de Cancelados</p>
+                            <p id="dashTotalCancelados" class="text-2xl font-black text-rose-400 mt-1">0</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-brand-card p-5 rounded-t-2xl shadow-sm border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
+                        <input type="text" id="buscaCancelados" onkeyup="filtrarCancelados()" placeholder="🔍 Pesquisar cancelados..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
                         <div class="flex flex-wrap items-center gap-2">
-                            <button onclick="gerarRelatorioParcelas()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">PDF</button>
-                            <button onclick="exportarParaExcel('Planilha_Parcelas', cacheParcelas)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
-                            <input type="file" id="upParcelas" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'parcelas')" />
-                            <label for="upParcelas" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs">
-                                <span id="upParcelasText">Importar</span>
+                            <button onclick="abrirModalCancelado()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow">+ Novo</button>
+                            <button onclick="gerarRelatorioCancelados()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">PDF</button>
+                            <button onclick="exportarParaExcel('Clientes_Cancelados_Rescisao', cacheCancelados)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
+                            <input type="file" id="upCancelados" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'cancelados')" />
+                            <label for="upCancelados" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs">
+                                <span id="upCanceladosText">Importar</span>
                             </label>
                         </div>
                     </div>
@@ -1964,13 +2193,63 @@
                                     <tr>
                                         <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
                                         <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Marca</th>
-                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Parcela</th>
-                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Valor</th>
-                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vencimento</th>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Data Rescisão</th>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Motivo</th>
+                                        <th class="px-4 md:px-6 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabelaCancelados" class="divide-y divide-brand-border/40"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ABA MENSAL FINANCEIRO -->
+                <div id="aba-mensal_financeiro" class="aba-conteudo hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h2 class="text-xl font-extrabold text-white tracking-tight">Mensal Financeiro</h2>
+                            <p class="text-slate-400 text-xs mt-0.5">Controle financeiro mensal com dashboard de arrecadação por mês.</p>
+                        </div>
+                    </div>
+
+                    <!-- DASHBOARD DE MESES -->
+                    <div class="mb-8">
+                        <h3 class="font-bold text-white text-xs uppercase tracking-wider mb-3">Arrecadação Total por Mês</h3>
+                        <div id="cardsMensalFinanceiro" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+                        <div class="bg-brand-card p-5 rounded-2xl border border-brand-border shadow-sm">
+                            <div class="h-64 relative flex justify-center items-center">
+                                <canvas id="chartMensalFinanceiro"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-brand-card p-4 rounded-t-2xl border border-brand-border border-b-0 flex flex-wrap gap-2 justify-between items-center">
+                        <input type="text" id="buscaMensalFinanceiro" onkeyup="filtrarMensalFinanceiro()" placeholder="🔍 Pesquisar mensal financeiro..." class="px-3.5 py-2 border border-brand-border bg-brand-dark text-white rounded-xl text-xs focus:outline-none focus:border-brand-gold w-48">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button onclick="gerarRelatorioMensalFinanceiro()" class="px-3.5 py-2 bg-[#132238] hover:bg-brand-border text-white rounded-xl font-bold text-xs border border-brand-border">PDF</button>
+                            <button onclick="exportarParaExcel('Mensal_Financeiro', cacheMensalFinanceiro)" class="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow">Excel</button>
+                            <input type="file" id="upMensalFinanceiro" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event, 'mensal_financeiro')" />
+                            <label for="upMensalFinanceiro" class="cursor-pointer px-4 py-2 bg-brand-gold hover:bg-brand-goldHover text-brand-dark rounded-xl font-bold shadow text-xs">
+                                <span id="upMensalFinanceiroText">Importar</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="bg-brand-card rounded-b-2xl shadow-sm border border-brand-border overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-brand-border">
+                                <thead class="bg-[#132238]">
+                                    <tr>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Marca</th>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mês / Ano</th>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Parcela / Referência</th>
+                                        <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Valor Recebido</th>
                                         <th class="px-4 md:px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
                                     </tr>
                                 </thead>
-                                <tbody id="tabelaParcelas" class="divide-y divide-brand-border/40"></tbody>
+                                <tbody id="tabelaMensalFinanceiro" class="divide-y divide-brand-border/40"></tbody>
                             </table>
                         </div>
                     </div>
