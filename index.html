@@ -1560,7 +1560,6 @@
                             const aba = workbook.Sheets[nomeAba];
                             const jsonRows = XLSX.utils.sheet_to_json(aba, {header: 1});
                             
-                            // Extrair o nome do cliente da metatag "NOME:"
                             let clienteNome = "Cliente";
                             for (let r = 0; r < jsonRows.length; r++) {
                                 let row = jsonRows[r];
@@ -1576,12 +1575,10 @@
                                 }
                             }
 
-                            // Encontrar a linha de cabeçalho com DATA e MARCA e previnir sparse arrays
                             let headerIdx = -1;
                             let headerRow = [];
                             
                             for (let r = 0; r < jsonRows.length; r++) {
-                                // O uso do Array.from ignora e preenche células invisíveis em branco
                                 let rowArr = Array.from(jsonRows[r] || []);
                                 let rowStr = rowArr.map(v => String(v || '').trim().toUpperCase());
                                 
@@ -1593,11 +1590,20 @@
                             }
 
                             if (headerIdx !== -1) {
-                                // Adicionamos a checagem v && para blindar contra células perfeitamente vazias ("buracos" no Excel)
                                 let idxData = headerRow.findIndex(v => v && v.includes('DATA'));
                                 let idxMarca = headerRow.findIndex(v => v && v.includes('MARCA'));
                                 let idxParcela = headerRow.findIndex(v => v && v.includes('PARCELA'));
-                                let idxValReceber = headerRow.findIndex(v => v && (v.includes('VALOR A RECEBER') || v.includes('RECEBER') || v.includes('VALOR')));
+                                
+                                // === ALGORITMO EXCLUSIVO DE PRIORIDADE DE NOME DE COLUNAS ===
+                                // Primeiro procura EXATAMENTE pela coluna VALOR A RECEBER?
+                                let idxValReceber = headerRow.findIndex(v => v && v.includes('VALOR A RECEBER?'));
+                                
+                                // Se não achar com ?, procura sem o ?
+                                if (idxValReceber === -1) idxValReceber = headerRow.findIndex(v => v && v.includes('VALOR A RECEBER'));
+                                // Se não achar, procura a primeira com a palavra RECEBIDO
+                                if (idxValReceber === -1) idxValReceber = headerRow.findIndex(v => v && v.includes('RECEBIDO'));
+                                // Se ainda não achar, procura de forma genérica
+                                if (idxValReceber === -1) idxValReceber = headerRow.findIndex(v => v && (v.includes('RECEBER') || v.includes('VALOR')));
 
                                 for (let r = headerIdx + 1; r < jsonRows.length; r++) {
                                     let row = Array.from(jsonRows[r] || []);
