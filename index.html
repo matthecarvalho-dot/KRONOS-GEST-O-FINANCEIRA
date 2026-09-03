@@ -1576,30 +1576,40 @@
                                 }
                             }
 
-                            // Encontrar a linha de cabeçalho com DATA e MARCA
+                            // Encontrar a linha de cabeçalho com DATA e MARCA e previnir sparse arrays
                             let headerIdx = -1;
+                            let headerRow = [];
+                            
                             for (let r = 0; r < jsonRows.length; r++) {
-                                let rowStr = jsonRows[r].map(v => String(v || '').trim().toUpperCase());
-                                if (rowStr.some(s => s.includes('DATA')) && rowStr.some(s => s.includes('MARCA'))) {
+                                // O uso do Array.from ignora e preenche células invisíveis em branco
+                                let rowArr = Array.from(jsonRows[r] || []);
+                                let rowStr = rowArr.map(v => String(v || '').trim().toUpperCase());
+                                
+                                if (rowStr.some(s => s && s.includes('DATA')) && rowStr.some(s => s && s.includes('MARCA'))) {
                                     headerIdx = r;
+                                    headerRow = rowStr;
                                     break;
                                 }
                             }
 
                             if (headerIdx !== -1) {
-                                let headerRow = jsonRows[headerIdx].map(v => String(v || '').trim().toUpperCase());
-                                let idxData = headerRow.findIndex(v => v.includes('DATA'));
-                                let idxMarca = headerRow.findIndex(v => v.includes('MARCA'));
-                                let idxParcela = headerRow.findIndex(v => v.includes('PARCELA'));
-                                let idxValReceber = headerRow.findIndex(v => v.includes('VALOR A RECEBER') || v.includes('RECEBER') || v.includes('VALOR'));
+                                // Adicionamos a checagem v && para blindar contra células perfeitamente vazias ("buracos" no Excel)
+                                let idxData = headerRow.findIndex(v => v && v.includes('DATA'));
+                                let idxMarca = headerRow.findIndex(v => v && v.includes('MARCA'));
+                                let idxParcela = headerRow.findIndex(v => v && v.includes('PARCELA'));
+                                let idxValReceber = headerRow.findIndex(v => v && (v.includes('VALOR A RECEBER') || v.includes('RECEBER') || v.includes('VALOR')));
 
                                 for (let r = headerIdx + 1; r < jsonRows.length; r++) {
-                                    let row = jsonRows[r];
-                                    if (!row || row.length === 0) continue;
+                                    let row = Array.from(jsonRows[r] || []);
+                                    if (row.length === 0) continue;
+                                    
                                     let dataVal = idxData !== -1 ? row[idxData] : null;
                                     let marcaVal = idxMarca !== -1 ? row[idxMarca] : '';
                                     
-                                    if (!dataVal || !marcaVal || String(marcaVal).toUpperCase().includes('TOTAL') || String(marcaVal).toUpperCase().includes('COMISSÕES')) continue;
+                                    if (!dataVal || !marcaVal) continue;
+                                    
+                                    let marcaStr = String(marcaVal).toUpperCase();
+                                    if (marcaStr.includes('TOTAL') || marcaStr.includes('COMISSÕES')) continue;
 
                                     let parcelaVal = idxParcela !== -1 ? (row[idxParcela] || '1/1') : '1/1';
                                     let rawValor = idxValReceber !== -1 ? row[idxValReceber] : 0;
