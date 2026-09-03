@@ -1565,10 +1565,13 @@
                             for (let r = 0; r < jsonRows.length; r++) {
                                 let row = jsonRows[r];
                                 for (let c = 0; c < row.length; c++) {
-                                    if (row[c] && String(row[c]).trim().toUpperCase() === 'NOME:') {
+                                    let val = String(row[c] || '').trim().toUpperCase();
+                                    if (val === 'NOME:') {
                                         if (c + 1 < row.length && row[c+1]) {
                                             clienteNome = String(row[c+1]).trim();
                                         }
+                                    } else if (val.startsWith('NOME:')) {
+                                        clienteNome = val.replace('NOME:', '').trim();
                                     }
                                 }
                             }
@@ -1596,36 +1599,27 @@
                                     let dataVal = idxData !== -1 ? row[idxData] : null;
                                     let marcaVal = idxMarca !== -1 ? row[idxMarca] : '';
                                     
-                                    if (!dataVal || !marcaVal || String(marcaVal).toUpperCase().includes('TOTAL')) continue;
+                                    if (!dataVal || !marcaVal || String(marcaVal).toUpperCase().includes('TOTAL') || String(marcaVal).toUpperCase().includes('COMISSÕES')) continue;
 
-                                    let parcelaVal = idxParcela !== -1 ? (row[idxParcela] || 'Mensalidade') : 'Mensalidade';
+                                    let parcelaVal = idxParcela !== -1 ? (row[idxParcela] || '1/1') : '1/1';
                                     let rawValor = idxValReceber !== -1 ? row[idxValReceber] : 0;
                                     let valorNum = parseFloat(String(rawValor || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
 
-                                    itensMensalFin.push({
-                                        cliente: clienteNome,
-                                        marca: String(marcaVal).trim(),
-                                        mes_ano: nomeAba,
-                                        parcela: String(parcelaVal).trim(),
-                                        valor: valorNum,
-                                        status: 'PAGO'
-                                    });
-                                }
-                            } else {
-                                const json = XLSX.utils.sheet_to_json(aba);
-                                for (let linha of json) {
-                                    let cli = String(linha['CLIENTE'] || linha['Cliente'] || clienteNome).trim();
-                                    let marca = String(linha['MARCA'] || linha['Marca'] || '-').trim();
-                                    let mesAno = String(linha['MÊS'] || linha['Mes'] || nomeAba).trim();
-                                    let parcela = String(linha['PARCELA'] || linha['Parcela'] || '-').trim();
-                                    let valor = parseFloat(String(linha['VALOR'] || linha['Valor'] || linha['VALOR PAGO'] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                                    let status = String(linha['STATUS'] || linha['Status'] || 'PAGO').trim().toUpperCase();
-                                    itensMensalFin.push({ cliente: cli, marca: marca, mes_ano: mesAno, parcela: parcela, valor: valor, status: status });
+                                    if (valorNum > 0) {
+                                        itensMensalFin.push({
+                                            cliente: clienteNome,
+                                            marca: String(marcaVal).trim(),
+                                            mes_ano: nomeAba,
+                                            parcela: String(parcelaVal).trim(),
+                                            valor: valorNum,
+                                            status: 'PAGO'
+                                        });
+                                    }
                                 }
                             }
                         }
                         await executarEmLotes("mensal_financeiro", itensMensalFin, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.mes_ano || '').trim()}_${String(d.parcela || '').trim()}`.toUpperCase());
-                        await registrarLog("Planilha Mensal Financeiro importada");
+                        await registrarLog("Planilha Mensal Financeiro importada com sucesso");
                         await window.sincronizarClientesGlobais(itensMensalFin);
                         carregarMensalFinanceiro();
                     }
@@ -1699,7 +1693,7 @@
                     alert(`Importado com sucesso!`);
                 } catch (err) {
                     console.error(err);
-                    alert("Erro ao processar planilha.");
+                    alert("Erro ao processar planilha: " + err.message);
                 } finally {
                     document.getElementById(btnTextId).innerText = textoOriginal;
                 }
