@@ -1594,16 +1594,8 @@
                                 let idxMarca = headerRow.findIndex(v => v && v.includes('MARCA'));
                                 let idxParcela = headerRow.findIndex(v => v && v.includes('PARCELA'));
                                 
-                                // === ALGORITMO EXCLUSIVO DE PRIORIDADE DE NOME DE COLUNAS ===
-                                // Primeiro procura EXATAMENTE pela coluna VALOR A RECEBER?
-                                let idxValReceber = headerRow.findIndex(v => v && v.includes('VALOR A RECEBER?'));
-                                
-                                // Se não achar com ?, procura sem o ?
-                                if (idxValReceber === -1) idxValReceber = headerRow.findIndex(v => v && v.includes('VALOR A RECEBER'));
-                                // Se não achar, procura a primeira com a palavra RECEBIDO
-                                if (idxValReceber === -1) idxValReceber = headerRow.findIndex(v => v && v.includes('RECEBIDO'));
-                                // Se ainda não achar, procura de forma genérica
-                                if (idxValReceber === -1) idxValReceber = headerRow.findIndex(v => v && (v.includes('RECEBER') || v.includes('VALOR')));
+                                // === COLUNA G (ÍNDICE 6) PARA O VALOR CONFORME SOLICITAÇÃO ===
+                                let idxValReceber = 6;
 
                                 for (let r = headerIdx + 1; r < jsonRows.length; r++) {
                                     let row = Array.from(jsonRows[r] || []);
@@ -1618,7 +1610,7 @@
                                     if (marcaStr.includes('TOTAL') || marcaStr.includes('COMISSÕES')) continue;
 
                                     let parcelaVal = idxParcela !== -1 ? (row[idxParcela] || '1/1') : '1/1';
-                                    let rawValor = idxValReceber !== -1 ? row[idxValReceber] : 0;
+                                    let rawValor = row[idxValReceber]; // Pega o valor da Coluna G (índice 6)
                                     let valorNum = parseFloat(String(rawValor || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
 
                                     if (valorNum > 0) {
@@ -1635,7 +1627,7 @@
                             }
                         }
                         await executarEmLotes("mensal_financeiro", itensMensalFin, (d) => `${String(d.cliente || '').trim()}_${String(d.marca || '').trim()}_${String(d.mes_ano || '').trim()}_${String(d.parcela || '').trim()}`.toUpperCase());
-                        await registrarLog("Planilha Mensal Financeiro importada com sucesso");
+                        await registrarLog("Planilha Mensal Financeiro importada com sucesso (Coluna G)");
                         await window.sincronizarClientesGlobais(itensMensalFin);
                         carregarMensalFinanceiro();
                     }
@@ -2267,7 +2259,7 @@
                     <div class="flex justify-between items-center mb-6">
                         <div>
                             <h2 class="text-xl font-extrabold text-white tracking-tight">Mensal Financeiro</h2>
-                            <p class="text-slate-400 text-xs mt-0.5">Controle financeiro mensal com dashboard de arrecadação por mês.</p>
+                            <p class="text-slate-400 text-xs mt-0.5">Controle financeiro mensal com dashboard de arrecadação por mês (Coluna G).</p>
                         </div>
                     </div>
 
